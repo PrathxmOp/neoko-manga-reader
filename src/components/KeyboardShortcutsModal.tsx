@@ -1,5 +1,6 @@
 import React from 'react';
 import { X, Keyboard } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface ShortcutsModalProps {
   isOpen: boolean;
@@ -7,6 +8,7 @@ interface ShortcutsModalProps {
 }
 
 export const KeyboardShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, onClose }) => {
+  useBodyScrollLock(isOpen);
   if (!isOpen) return null;
 
   const navigationShortcuts = [
@@ -30,8 +32,8 @@ export const KeyboardShortcutsModal: React.FC<ShortcutsModalProps> = ({ isOpen, 
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-surface-container-high p-6 shadow-2xl space-y-6 text-on-surface">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 pt-14 pb-16 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-surface-container-high p-6 shadow-2xl space-y-6 text-on-surface max-h-[calc(100vh-130px)] sm:max-h-[85vh] flex flex-col my-auto overflow-y-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-surface-container-high pb-4">
           <div className="flex items-center gap-2.5">

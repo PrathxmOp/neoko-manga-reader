@@ -300,10 +300,24 @@ export function setEnabledSourceIds(sourceIds: string[]) {
 export function getContentFilterSettings(): ContentFilterSettings {
   try {
     const raw = localStorage.getItem(CONTENT_FILTER_KEY);
-    return raw ? JSON.parse(raw) : { contentRating: 'Suggestive', languages: ['en'] };
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      let contentRating: 'normal' | '18+' = 'normal';
+      if (parsed.contentRating === '18+' || parsed.contentRating === 'All' || parsed.contentRating === 'Erotica') {
+        contentRating = '18+';
+      } else {
+        contentRating = 'normal';
+      }
+      return {
+        contentRating,
+        languages: ['en'],
+        extensionModes: parsed.extensionModes || {},
+      };
+    }
   } catch {
-    return { contentRating: 'Suggestive', languages: ['en'] };
+    // fallback
   }
+  return { contentRating: 'normal', languages: ['en'], extensionModes: {} };
 }
 
 export function saveContentFilterSettings(settings: Partial<ContentFilterSettings>): ContentFilterSettings {
@@ -311,8 +325,36 @@ export function saveContentFilterSettings(settings: Partial<ContentFilterSetting
   const updated = { ...current, ...settings };
   localStorage.setItem(CONTENT_FILTER_KEY, JSON.stringify(updated));
   clearApiCache();
-  window.dispatchEvent(new Event('neoko_content_filter_changed'));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('neoko_content_filter_changed'));
+  }
   return updated;
+}
+
+export function getExtensionModes(): Record<string, 'normal' | '18+'> {
+  return getContentFilterSettings().extensionModes || {};
+}
+
+export function getExtensionMode(sourceIdOrName: string | number, isNsfwDefault: boolean = false): 'normal' | '18+' {
+  const modes = getExtensionModes();
+  const key = String(sourceIdOrName).trim();
+  const lowerKey = key.toLowerCase();
+
+  // Look for exact key or case-insensitive match
+  if (modes[key]) return modes[key];
+  const matchedKey = Object.keys(modes).find(k => k.toLowerCase() === lowerKey);
+  if (matchedKey && modes[matchedKey]) return modes[matchedKey];
+
+  // Default assignment: if porno/erotica/nsfw -> '18+', else -> 'normal'
+  return isNsfwDefault ? '18+' : 'normal';
+}
+
+export function setExtensionMode(sourceIdOrName: string | number, mode: 'normal' | '18+'): Record<string, 'normal' | '18+'> {
+  const settings = getContentFilterSettings();
+  const key = String(sourceIdOrName).trim();
+  const extensionModes = { ...(settings.extensionModes || {}), [key]: mode };
+  saveContentFilterSettings({ extensionModes });
+  return extensionModes;
 }
 
 // ──────────────── Reader Settings ────────────────

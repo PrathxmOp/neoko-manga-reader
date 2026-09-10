@@ -1,6 +1,6 @@
 import { Manga, Chapter, Source, Extension, TrackerInfo, Category, DownloadStatus, ServerSettings, ServerInfo } from '../types/manga';
 export type { Manga, Chapter, Source, Extension, TrackerInfo, Category, DownloadStatus, ServerSettings, ServerInfo };
-import { getCachedData, setCachedData, getContentFilterSettings, isSourceEnabled } from './storage';
+import { getCachedData, setCachedData, getContentFilterSettings, isSourceEnabled, getExtensionMode } from './storage';
 
 const GRAPHQL_ENDPOINT = '/api/graphql';
 
@@ -166,14 +166,14 @@ export function isRecommendedSource(name: string): boolean {
   );
 }
 
-export async function getSources(forceRefresh: boolean = false): Promise<Source[]> {
-  const settings = getContentFilterSettings();
-  const cacheKey = `sources_list_${settings.contentRating}`;
-  if (!forceRefresh) {
-    const cached = getCachedData<Source[]>(cacheKey);
-    if (cached && cached.length > 0) {
-      cached.forEach(s => { sourceLookupMap[String(s.id)] = s; });
-      return filterSourcesByContentRating(cached.filter(s => !isBrokenSource(s.name)));
+export async function getSources(forceRefresh: boolean = false, ignoreRatingFilter: boolean = false): Promise<Source[]> {
+  const cacheKey = `sources_list_raw_v2`;
+  const cached = getCachedData<Source[]>(cacheKey);
+
+  if (cached && cached.length > 0) {
+    cached.forEach(s => { sourceLookupMap[String(s.id)] = s; });
+    if (!forceRefresh) {
+      return ignoreRatingFilter ? cached : filterSourcesByContentRating(cached.filter(s => !isBrokenSource(s.name)));
     }
   }
 
@@ -222,7 +222,7 @@ export async function getSources(forceRefresh: boolean = false): Promise<Source[
     });
 
     setCachedData(cacheKey, sorted, 30);
-    return filterSourcesByContentRating(sorted);
+    return ignoreRatingFilter ? sorted : filterSourcesByContentRating(sorted);
   } catch (e) {
     console.error('Failed to fetch sources:', e);
     return [];
@@ -322,18 +322,18 @@ export function filterSourcesByContentRating(sources: Source[]): Source[] {
   const settings = getContentFilterSettings();
   const rating = settings.contentRating;
 
-  if (rating === 'Safe') {
-    return sources.filter(s => !isNsfwSource(s) && !s.name.toLowerCase().includes('ecchi'));
+  if (rating === 'normal') {
+    return sources.filter(s => {
+      const mode = getExtensionMode(s.id, isNsfwSource(s));
+      const modeByName = getExtensionMode(s.name, isNsfwSource(s));
+      return mode === 'normal' && modeByName === 'normal';
+    });
+  } else {
+    // 18+ mode: includes 18+ sources and standard sources
+    const nsfw = sources.filter(s => getExtensionMode(s.id, isNsfwSource(s)) === '18+' || getExtensionMode(s.name, isNsfwSource(s)) === '18+');
+    const sfw = sources.filter(s => getExtensionMode(s.id, isNsfwSource(s)) === 'normal' && getExtensionMode(s.name, isNsfwSource(s)) === 'normal');
+    return [...nsfw, ...sfw];
   }
-  if (rating === 'Suggestive') {
-    return sources.filter(s => !isNsfwSource(s));
-  }
-  if (rating === 'All' || rating === 'Erotica') {
-    const sfw = sources.filter(s => !isNsfwSource(s));
-    const nsfw = sources.filter(s => isNsfwSource(s));
-    return [...sfw, ...nsfw];
-  }
-  return sources;
 }
 
 export function getSourceName(sourceId?: string, sourceName?: string): string {
@@ -420,7 +420,8 @@ export async function fetchSourceManga(
     if (!result || !result.mangas) return { mangas: [], hasNextPage: false };
 
     const sourceObj = sourceLookupMap[String(sourceId)];
-    const resolvedSourceName = sourceObj?.name || (sourceId === '2499283573021220255' ? 'MangaDex' : undefined);
+    const resolvedSourceName = sourceObj?.name || getSourceName(sourceId);
+    const resolvedLang = (sourceObj?.lang || 'en').toLowerCase();
 
     const mangas: Manga[] = (result.mangas || []).map((m: any) => ({
       id: m.id,
@@ -428,7 +429,8 @@ export async function fetchSourceManga(
       thumbnailUrl: getImageUrl(m.thumbnailUrl),
       url: m.url,
       sourceId,
-      sourceName: getSourceName(sourceId, resolvedSourceName),
+      sourceName: resolvedSourceName,
+      lang: resolvedLang,
       inLibrary: m.inLibrary,
     }));
 
@@ -452,24 +454,16 @@ export function filterMangaByContentRating(mangas: Manga[]): Manga[] {
   const settings = getContentFilterSettings();
   const rating = settings.contentRating;
 
-  if (rating === 'All' || rating === 'Erotica') {
-    // Return all mangas, placing 18+ adult titles at the very front of the feed!
-    const nsfw = mangas.filter(m => isNsfwManga(m));
-    const sfw = mangas.filter(m => !isNsfwManga(m));
-    return [...nsfw, ...sfw];
+  if (rating === '18+') {
+    // In 18+ mode: Return all mangas intact so normal and 18+ titles are both visible together
+    return mangas;
   }
 
   return mangas.filter(m => {
     const isAdult = isNsfwManga(m);
-    const genreStr = Array.isArray(m.genre) ? m.genre.join(' ').toLowerCase() : (m.genre || '').toLowerCase();
-
-    if (rating === 'Safe') {
-      return !isAdult && !genreStr.includes('ecchi');
-    }
-    if (rating === 'Suggestive') {
-      return !isAdult;
-    }
-    return true;
+    const sIdMode = m.sourceId ? getExtensionMode(m.sourceId, isAdult) : 'normal';
+    const sNameMode = m.sourceName ? getExtensionMode(m.sourceName, isAdult) : 'normal';
+    return !isAdult && sIdMode === 'normal' && sNameMode === 'normal';
   });
 }
 
@@ -506,12 +500,12 @@ export async function searchMultiSource(
 
       const pool = langSources.length > 0 ? langSources : allSources.filter(s => isSourceEnabled(s.id, s.name));
 
-      if (rating === 'All' || rating === 'Erotica') {
-        const nsfw = pool.filter(s => isNsfwSource(s));
-        const sfw = pool.filter(s => !isNsfwSource(s));
+      if (rating === '18+') {
+        const nsfw = pool.filter(s => getExtensionMode(s.id, isNsfwSource(s)) === '18+' || getExtensionMode(s.name, isNsfwSource(s)) === '18+');
+        const sfw = pool.filter(s => getExtensionMode(s.id, isNsfwSource(s)) === 'normal' && getExtensionMode(s.name, isNsfwSource(s)) === 'normal');
         validSourceIds = [...sfw.map(s => s.id), ...nsfw.map(s => s.id)];
       } else {
-        const safe = pool.filter(s => !isNsfwSource(s));
+        const safe = pool.filter(s => getExtensionMode(s.id, isNsfwSource(s)) === 'normal' && getExtensionMode(s.name, isNsfwSource(s)) === 'normal');
         validSourceIds = safe.length > 0 ? safe.map(s => s.id) : pool.map(s => s.id);
       }
     } catch (e) {
@@ -644,6 +638,11 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
             inLibrary
             inLibraryAt
             lastFetchedAt
+            source {
+              id
+              name
+              lang
+            }
             chapters {
               nodes {
                 id
@@ -685,6 +684,7 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
             };
           });
 
+          const sObj = dbManga.source || (dbManga.sourceId ? sourceLookupMap[String(dbManga.sourceId)] : null);
           const resultManga: Manga = {
             id: dbManga.id,
             title: dbManga.title,
@@ -694,6 +694,9 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
             genre: typeof dbManga.genre === 'string' ? dbManga.genre.split(',').map((g: string) => g.trim()) : dbManga.genre || [],
             status: normalizeMangaStatus(dbManga.status),
             thumbnailUrl: getImageUrl(dbManga.thumbnailUrl),
+            sourceId: sObj?.id ? String(sObj.id) : (dbManga.sourceId ? String(dbManga.sourceId) : undefined),
+            sourceName: sObj?.name || getSourceName(dbManga.sourceId),
+            lang: (sObj?.lang || 'en').toLowerCase(),
             chapters,
             chapterCount: chapters.length,
             inLibrary: dbManga.inLibrary,
@@ -732,6 +735,11 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
           inLibrary
           inLibraryAt
           lastFetchedAt
+          source {
+            id
+            name
+            lang
+          }
           chapters {
             nodes {
               id
@@ -770,6 +778,11 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
             inLibrary
             inLibraryAt
             lastFetchedAt
+            source {
+              id
+              name
+              lang
+            }
             chapters {
               nodes {
                 id
@@ -817,6 +830,7 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
       };
     });
 
+    const sObj = m.source || (m.sourceId ? sourceLookupMap[String(m.sourceId)] : null);
     const resultManga: Manga = {
       id: m.id,
       title: m.title,
@@ -826,6 +840,9 @@ export async function getMangaDetails(mangaId: number | string, forceRefresh: bo
       genre: typeof m.genre === 'string' ? m.genre.split(',').map((g: string) => g.trim()) : m.genre || [],
       status: normalizeMangaStatus(m.status),
       thumbnailUrl: getImageUrl(m.thumbnailUrl),
+      sourceId: sObj?.id ? String(sObj.id) : (m.sourceId ? String(m.sourceId) : undefined),
+      sourceName: sObj?.name || getSourceName(m.sourceId),
+      lang: (sObj?.lang || 'en').toLowerCase(),
       chapters,
       chapterCount: chapters.length,
       inLibrary: m.inLibrary,

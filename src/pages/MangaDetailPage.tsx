@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 
 import { getComicType, getComicTypeColor } from '../utils/mangaType';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 export const MangaDetailPage: React.FC = () => {
   const { mangaId } = useParams<{ mangaId: string }>();
@@ -25,6 +26,7 @@ export const MangaDetailPage: React.FC = () => {
   const [inLibrary, setInLibrary] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<BookmarkItem['category'] | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
+  useBodyScrollLock(showCategoryModal);
   const [expandDesc, setExpandDesc] = useState(false);
   const [aniListData, setAniListData] = useState<AniListMangaData | null>(null);
   const [chapterSearch, setChapterSearch] = useState('');

@@ -6,11 +6,14 @@ import {
   getReaderSettings, saveReaderSettings, getContentFilterSettings, saveContentFilterSettings,
   getAppSettings, saveAppSettings, clearApiCache, clearHistory, getBookmarks,
   exportAllData, importAllData, clearAllData, getStorageUsage,
-  getDisabledSourceIds, isSourceEnabled, toggleSourceEnabled
+  getDisabledSourceIds, isSourceEnabled, toggleSourceEnabled,
+  getExtensionMode, setExtensionMode
 } from '../services/storage';
-import { getTrackers, loginTrackerCredentials, logoutTracker, getServerInfo, clearCachedImages, getCategories, createCategory, deleteCategory, getSources } from '../services/suwayomiApi';
+import { getTrackers, loginTrackerCredentials, logoutTracker, getServerInfo, clearCachedImages, getCategories, createCategory, deleteCategory, getSources, isDedicatedNsfwName } from '../services/suwayomiApi';
 import { getCacheUsageStats } from '../services/cacheManager';
 import { ReaderSettings, ContentFilterSettings, AppSettings, TrackerInfo, Category, ServerInfo, Source } from '../types/manga';
+import { AgeVerificationModal } from '../components/AgeVerificationModal';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   Settings, BookOpen, Eye, Library, Download, Bell, Palette, Database, Info,
   ChevronRight, Check, ShieldCheck, Heart, Sparkles, Flame, Monitor, Moon, Sun,
@@ -54,6 +57,8 @@ export const SettingsPage: React.FC = () => {
   const [readerSettings, setReaderSettingsState] = useState<ReaderSettings>(getReaderSettings());
   const [contentSettings, setContentSettingsState] = useState<ContentFilterSettings>(getContentFilterSettings());
   const [appSettings, setAppSettingsState] = useState<AppSettings>(getAppSettings());
+  const [showAgeModal, setShowAgeModal] = useState(false);
+  useBodyScrollLock(showAgeModal);
 
   // Profile editing state
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -85,10 +90,20 @@ export const SettingsPage: React.FC = () => {
   const loadCategories = async () => { setCategories(await getCategories()); };
   const loadServerInfo = async () => { setServerInfo(await getServerInfo()); };
   const loadMangaSources = async () => {
-    setLoadingSources(true);
+    // First render cached sources immediately for 0ms loading time
+    const cached = await getSources(false, true);
+    if (cached && cached.length > 0) {
+      setSources(cached);
+      setLoadingSources(false);
+    } else {
+      setLoadingSources(true);
+    }
+
     try {
-      const list = await getSources();
-      setSources(list);
+      const list = await getSources(true, true);
+      if (list && list.length > 0) {
+        setSources(list);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -118,6 +133,14 @@ export const SettingsPage: React.FC = () => {
     setDisabledSourceIds([]);
     triggerSaveNotice();
     window.dispatchEvent(new Event('neoko_content_filter_changed'));
+  };
+
+  const handleToggleExtensionMode = (sourceId: string | number, sourceName: string, targetMode: 'normal' | '18+') => {
+    setExtensionMode(sourceId, targetMode);
+    setExtensionMode(sourceName, targetMode);
+    setContentSettingsState(getContentFilterSettings());
+    triggerSaveNotice();
+    showToast(`"${sourceName}" assigned to ${targetMode} mode`, 'success');
   };
 
   const updateReader = (patch: Partial<ReaderSettings>) => {
@@ -229,6 +252,14 @@ export const SettingsPage: React.FC = () => {
 
   return (
     <main className="flex flex-col relative w-full pt-16 sm:pt-20 pb-24 px-3 sm:px-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
+      {/* Floating Fixed Saved Toast Badge */}
+      {showSavedBadge && (
+        <div className="fixed top-16 sm:top-20 right-4 sm:right-8 z-50 px-4 py-2.5 rounded-2xl bg-emerald-950/90 text-emerald-400 border border-emerald-500/40 text-xs font-extrabold flex items-center gap-2 shadow-2xl backdrop-blur-xl animate-in fade-in slide-in-from-top-3">
+          <Check className="w-4 h-4 stroke-[3]" />
+          <span>Settings Saved</span>
+        </div>
+      )}
+
       {/* 1. Kagane Search Settings Input */}
       <div className="w-full flex items-center justify-between gap-3">
         <div className="flex-1 flex items-center bg-[#161327] rounded-xl px-4 py-3 border border-[#2b2746] focus-within:border-[#9d86e9] transition-all">
@@ -241,12 +272,6 @@ export const SettingsPage: React.FC = () => {
             className="w-full bg-transparent text-white text-sm placeholder-[#7c779b] focus:outline-none"
           />
         </div>
-        {showSavedBadge && (
-          <span className="px-3.5 py-2.5 rounded-xl bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1.5 animate-fade-in shrink-0 shadow-sm">
-            <Check className="w-4 h-4 stroke-[3]" />
-            <span>Saved</span>
-          </span>
-        )}
       </div>
 
       {/* 2. Kagane Horizontal Category Pill Tabs */}
@@ -433,48 +458,82 @@ export const SettingsPage: React.FC = () => {
 
             {/* ──── CONTENT & FILTERING ──── */}
             {activeTab === 'content' && (
-              <div className="space-y-4">
-                <SectionTitle title="Content Safety & Rating" />
-                <p className="font-sans text-xs text-[#7c779b] mb-3">
-                  Choose content filters for search results, browse catalog, and home recommendations.
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {[
-                    { key: 'Safe', title: 'Safe', desc: 'Family-friendly content. No mature themes.', icon: ShieldCheck },
-                    { key: 'Suggestive', title: 'Suggestive', desc: 'Mild fan service and romantic themes.', icon: Heart, badge: 'Recommended' },
-                    { key: 'Erotica', title: 'Erotica', desc: 'Sexual content and mature themes.', icon: Sparkles },
-                    { key: 'All', title: 'All Content (18+)', desc: 'All content including explicit material.', icon: Flame },
-                  ].map(r => {
-                    const isSelected = contentSettings.contentRating === r.key;
-                    const Icon = r.icon;
-                    return (
-                      <div
-                        key={r.key}
-                        onClick={() => {
-                          updateContent({ contentRating: r.key as any });
-                        }}
-                        className={`group p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3.5 ${
-                          isSelected
-                            ? 'bg-[#9d86e9]/15 border-[#9d86e9] shadow-md'
-                            : 'bg-[#1c1833] border-[#2b2746] hover:border-[#9d86e9]/40'
-                        }`}
-                      >
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                          isSelected ? 'bg-[#9d86e9] text-[#0c0c14] font-bold' : 'bg-[#231f3d] text-[#7c779b]'
-                        }`}>
-                          <Icon className="w-5 h-5" />
-                        </div>
-                        <div className="flex flex-col flex-1 min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-display font-bold text-sm text-white">{r.title}</span>
-                            {r.badge && <span className="px-2 py-0.5 rounded-md bg-[#9d86e9]/20 text-[#9d86e9] text-[10px] font-extrabold uppercase">{r.badge}</span>}
+              <div className="space-y-6">
+                <div>
+                  <SectionTitle title="Content Safety & Active Mode" />
+                  <p className="font-sans text-xs text-[#7c779b] mb-3">
+                    Select your active browsing mode. Switch between Normal mode and 18+ mode anytime.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {[
+                      {
+                        key: 'normal',
+                        title: 'Normal Mode',
+                        desc: 'Standard manga, manhwa & webtoons. All adult content is hidden.',
+                        icon: ShieldCheck,
+                        badge: 'Standard',
+                      },
+                      {
+                        key: '18+',
+                        title: '18+ Mode',
+                        desc: 'Unlocks explicit 18+ adult content, erotica, and adult sources.',
+                        icon: Flame,
+                        badge: 'Adult (18+)',
+                      },
+                    ].map(r => {
+                      const isSelected = contentSettings.contentRating === r.key;
+                      const Icon = r.icon;
+                      return (
+                        <div
+                          key={r.key}
+                          onClick={() => {
+                            if (r.key === '18+' && contentSettings.contentRating !== '18+') {
+                              setShowAgeModal(true);
+                            } else {
+                              updateContent({ contentRating: r.key as any });
+                            }
+                          }}
+                          className={`group p-4 rounded-2xl border cursor-pointer transition-all flex items-start gap-3.5 ${
+                            isSelected
+                              ? 'bg-[#9d86e9]/15 border-[#9d86e9] shadow-md'
+                              : 'bg-[#1c1833] border-[#2b2746] hover:border-[#9d86e9]/40'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            isSelected ? 'bg-[#9d86e9] text-[#0c0c14] font-bold' : 'bg-[#231f3d] text-[#7c779b]'
+                          }`}>
+                            <Icon className="w-5 h-5" />
                           </div>
-                          <p className="font-sans text-xs text-[#7c779b] mt-1">{r.desc}</p>
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-display font-bold text-sm text-white">{r.title}</span>
+                              {r.badge && <span className="px-2 py-0.5 rounded-md bg-[#9d86e9]/20 text-[#9d86e9] text-[10px] font-extrabold uppercase">{r.badge}</span>}
+                            </div>
+                            <p className="font-sans text-xs text-[#7c779b] mt-1">{r.desc}</p>
+                          </div>
+                          {isSelected && <div className="w-5 h-5 rounded-full bg-[#9d86e9] text-[#0c0c14] flex items-center justify-center shrink-0 mt-0.5"><Check className="w-3.5 h-3.5 stroke-[3]" /></div>}
                         </div>
-                        {isSelected && <div className="w-5 h-5 rounded-full bg-[#9d86e9] text-[#0c0c14] flex items-center justify-center shrink-0 mt-0.5"><Check className="w-3.5 h-3.5 stroke-[3]" /></div>}
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Per-extension management shortcut info banner */}
+                <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] flex flex-col sm:flex-row items-center justify-between gap-3 pt-4">
+                  <div className="flex flex-col">
+                    <span className="font-sans text-xs font-bold text-white">Manage Individual Extensions & Modes</span>
+                    <span className="font-sans text-xs text-[#7c779b] mt-0.5">
+                      Enable/disable specific extension sources, or assign individual extensions to Normal or 18+ mode.
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => changeTab('sources')}
+                    className="px-4 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2e294f] text-[#9d86e9] font-extrabold text-xs flex items-center gap-1.5 border border-[#39335a] transition-all shrink-0 shadow-sm"
+                  >
+                    <Radio className="w-3.5 h-3.5" />
+                    <span>Go to Sources & Providers</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             )}
@@ -486,16 +545,18 @@ export const SettingsPage: React.FC = () => {
                   <div>
                     <SectionTitle title="Manga Sources & Providers" />
                     <p className="font-sans text-xs text-[#7c779b]">
-                      Select which sources supply recommendations to your Home feed and Search catalog. All sources are ON by default — toggle off any source you wish to disable.
+                      Select which sources supply recommendations to your Home feed and Search catalog. Toggle enabled status or switch extension mode (Normal / 18+).
                     </p>
                   </div>
-                  <button
-                    onClick={handleEnableAllSources}
-                    className="px-3.5 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2e294f] text-[#9d86e9] font-bold text-xs flex items-center gap-1.5 border border-[#39335a] transition-all shrink-0 self-start sm:self-auto shadow-sm"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Enable All Sources</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleEnableAllSources}
+                      className="px-3.5 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2e294f] text-[#9d86e9] font-bold text-xs flex items-center gap-1.5 border border-[#39335a] transition-all shrink-0 shadow-sm"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Enable All</span>
+                    </button>
+                  </div>
                 </div>
 
                 {loadingSources ? (
@@ -515,14 +576,16 @@ export const SettingsPage: React.FC = () => {
                       .map(src => {
                         const isEnabled = !disabledSourceIds.includes(String(src.id));
                         const isFast = ['Asura Scans', 'Flame Comics', 'Bato.to', 'MangaReader', 'MANGA Plus by SHUEISHA'].some(n => src.name.includes(n));
+                        const isDedicatedNsfw = isDedicatedNsfwName(src.name);
+                        const currentMode = getExtensionMode(src.id, isDedicatedNsfw);
 
                         return (
                           <div
                             key={src.id}
-                            className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3 transition-all ${
+                            className={`p-3.5 rounded-2xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${
                               isEnabled
                                 ? 'bg-[#1c1833] border-[#9d86e9]/40 shadow-sm'
-                                : 'bg-[#161327] border-[#2b2746] opacity-75'
+                                : 'bg-[#161327] border-[#2b2746] opacity-60'
                             }`}
                           >
                             <div className="flex items-center gap-3 min-w-0">
@@ -535,9 +598,9 @@ export const SettingsPage: React.FC = () => {
                                   src.name.substring(0, 2).toUpperCase()
                                 )}
                               </div>
-                              <div className="flex flex-col min-w-0">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-display font-bold text-sm text-white truncate">
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-display font-bold text-sm text-white break-words leading-tight">
                                     {src.name}
                                   </span>
                                   {isFast && (
@@ -546,16 +609,46 @@ export const SettingsPage: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <span className="text-[10px] text-[#7c779b] font-semibold uppercase">
-                                  {src.lang} {isEnabled ? '• Enabled' : '• Disabled'}
+                                <span className="text-[10px] text-[#7c779b] font-semibold uppercase mt-0.5">
+                                  {src.lang} • {isEnabled ? (currentMode === '18+' ? '🔴 18+ Mode' : '🟢 Normal Mode') : '⚪ Disabled (OFF)'}
                                 </span>
                               </div>
                             </div>
 
-                            <ToggleSwitch
-                              active={isEnabled}
-                              onToggle={() => handleToggleSource(src.id)}
-                            />
+                            <div className="flex items-center justify-between sm:justify-end gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-[#2b2746]/60">
+                              {/* Extension Mode Pills */}
+                              <div className="flex items-center bg-[#120f23] p-1 rounded-xl border border-[#2b2746]">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExtensionMode(src.id, src.name, 'normal')}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                    currentMode === 'normal'
+                                      ? 'bg-[#9d86e9] text-[#0c0c14] shadow-sm'
+                                      : 'text-[#7c779b] hover:text-white'
+                                  }`}
+                                  title="Normal Mode"
+                                >
+                                  Normal
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExtensionMode(src.id, src.name, '18+')}
+                                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                                    currentMode === '18+'
+                                      ? 'bg-[#ef4444] text-white shadow-sm'
+                                      : 'text-[#7c779b] hover:text-white'
+                                  }`}
+                                  title="18+ Mode"
+                                >
+                                  18+
+                                </button>
+                              </div>
+
+                              <ToggleSwitch
+                                active={isEnabled}
+                                onToggle={() => handleToggleSource(src.id)}
+                              />
+                            </div>
                           </div>
                         );
                       })}
@@ -856,6 +949,17 @@ export const SettingsPage: React.FC = () => {
               </div>
             )}
           </div>
-    </main>
+
+        <AgeVerificationModal
+          isOpen={showAgeModal}
+          onConfirm={() => {
+            updateContent({ contentRating: '18+' });
+            setShowAgeModal(false);
+          }}
+          onCancel={() => {
+            setShowAgeModal(false);
+          }}
+        />
+      </main>
   );
 };

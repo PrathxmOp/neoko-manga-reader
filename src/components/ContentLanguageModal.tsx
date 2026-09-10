@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { getContentFilterSettings, saveContentFilterSettings } from '../services/storage';
 import { ContentFilterSettings } from '../types/manga';
-import { X, Check, ShieldCheck, Heart, Sparkles, Flame, Languages, Globe } from 'lucide-react';
+import { X, Check, ShieldCheck, Flame, Shield } from 'lucide-react';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+
+import { AgeVerificationModal } from './AgeVerificationModal';
 
 interface ModalProps {
   isOpen: boolean;
@@ -10,53 +13,32 @@ interface ModalProps {
 }
 
 export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, onSave }) => {
+  useBodyScrollLock(isOpen);
   const [settings, setSettings] = useState<ContentFilterSettings>(getContentFilterSettings());
-  const [selectedLangs, setSelectedLangs] = useState<string[]>(
-    Array.isArray(settings.languages) && settings.languages.length > 0 ? settings.languages : ['en']
-  );
   const [selectedRating, setSelectedRating] = useState<ContentFilterSettings['contentRating']>(
-    settings.contentRating || 'Suggestive'
+    settings.contentRating || 'normal'
   );
+  const [showAgeModal, setShowAgeModal] = useState(false);
 
   if (!isOpen) return null;
 
-  const toggleLanguage = (langCode: string) => {
-    if (langCode === 'all') {
-      setSelectedLangs(['all']);
-      return;
-    }
-
-    let updated: string[];
-    if (selectedLangs.includes('all')) {
-      updated = [langCode];
-    } else if (selectedLangs.includes(langCode)) {
-      updated = selectedLangs.filter(l => l !== langCode);
-      if (updated.length === 0) updated = ['en'];
+  const handleRatingSelect = (key: ContentFilterSettings['contentRating']) => {
+    if (key === '18+' && selectedRating !== '18+') {
+      setShowAgeModal(true);
     } else {
-      updated = [...selectedLangs, langCode];
+      setSelectedRating(key);
     }
-    setSelectedLangs(updated);
   };
 
   const handleSave = () => {
     const updated = saveContentFilterSettings({
       contentRating: selectedRating,
-      languages: selectedLangs,
+      languages: ['en'],
     });
     setSettings(updated);
     if (onSave) onSave(updated);
     onClose();
   };
-
-  const languageOptions = [
-    { code: 'en', label: 'English', flag: '🇬🇧' },
-    { code: 'ja', label: 'Japanese', flag: '🇯🇵' },
-    { code: 'ko', label: 'Korean', flag: '🇰🇷' },
-    { code: 'es', label: 'Spanish', flag: '🇪🇸' },
-    { code: 'fr', label: 'French', flag: '🇫🇷' },
-    { code: 'pl', label: 'Polish', flag: '🇵🇱' },
-    { code: 'all', label: 'All Languages', flag: '🌐' },
-  ];
 
   const ratings: {
     key: ContentFilterSettings['contentRating'];
@@ -66,47 +48,36 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
     icon: any;
   }[] = [
     {
-      key: 'Safe',
-      title: 'Safe',
-      desc: 'Family-friendly content suitable for all ages.',
+      key: 'normal',
+      title: 'Normal Mode',
+      badge: 'Standard',
+      desc: 'Standard manga, manhwa & webtoons. All adult content is hidden.',
       icon: ShieldCheck,
     },
     {
-      key: 'Suggestive',
-      title: 'Suggestive',
-      badge: 'Recommended',
-      desc: 'Mild fan service, romance, and suggestive themes.',
-      icon: Heart,
-    },
-    {
-      key: 'Erotica',
-      title: 'Erotica',
-      desc: 'Mature themes, violence, and non-explicit erotica.',
-      icon: Sparkles,
-    },
-    {
-      key: 'All',
-      title: 'Pornographic (18+)',
-      desc: 'Includes explicit 18+ adult content.',
+      key: '18+',
+      title: '18+ Mode',
+      badge: 'Adult (18+)',
+      desc: 'Unlocks explicit 18+ adult content, erotica, and adult sources.',
       icon: Flame,
     },
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-[#2b2746] p-5 sm:p-6 shadow-2xl space-y-5 text-white max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 pt-14 pb-16 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+      <div className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-[#2b2746] p-5 sm:p-6 shadow-2xl space-y-5 text-white max-h-[calc(100vh-130px)] sm:max-h-[85vh] flex flex-col my-auto">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2b2746] pb-3 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9]">
-              <Globe className="w-5 h-5" />
+              <Shield className="w-5 h-5" />
             </div>
             <div>
               <h2 className="font-display font-extrabold text-lg sm:text-xl text-white">
-                Content & Language Settings
+                Content Safety Settings
               </h2>
               <p className="font-sans text-xs text-[#7c779b]">
-                Select reading languages and content safety rating.
+                Select active content browsing mode (Normal or 18+).
               </p>
             </div>
           </div>
@@ -120,39 +91,8 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
 
         {/* Scrollable Body */}
         <div className="overflow-y-auto space-y-5 pr-1 scrollbar-thin scrollbar-thumb-[#2b2746] flex-1">
-          {/* Section 1: Language Preferences */}
+          {/* Content Rating Options */}
           <div className="space-y-2.5">
-            <label className="text-xs font-extrabold uppercase text-[#9d86e9] tracking-wider flex items-center gap-1.5">
-              <Languages className="w-4 h-4" />
-              Manga Reading Languages
-            </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {languageOptions.map((lang) => {
-                const isSelected = selectedLangs.includes(lang.code);
-                return (
-                  <button
-                    key={lang.code}
-                    type="button"
-                    onClick={() => toggleLanguage(lang.code)}
-                    className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs font-bold transition-all active:scale-95 ${
-                      isSelected
-                        ? 'bg-[#9d86e9]/20 border-[#9d86e9] text-[#9d86e9] shadow-sm'
-                        : 'bg-[#1c1833] border-[#2b2746] text-slate-300 hover:border-[#9d86e9]/40'
-                    }`}
-                  >
-                    <span className="flex items-center gap-1.5 truncate">
-                      <span>{lang.flag}</span>
-                      <span className="truncate">{lang.label}</span>
-                    </span>
-                    {isSelected && <Check className="w-3.5 h-3.5 text-[#9d86e9] shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section 2: Content Rating Options */}
-          <div className="space-y-2.5 pt-2 border-t border-[#2b2746]">
             <label className="text-xs font-extrabold uppercase text-[#9d86e9] tracking-wider flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4" />
               Content Safety Rating
@@ -164,17 +104,17 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
                 return (
                   <div
                     key={r.key}
-                    onClick={() => setSelectedRating(r.key)}
-                    className={`group p-3 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
+                    onClick={() => handleRatingSelect(r.key)}
+                    className={`group p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start gap-3 ${
                       isSelected
                         ? 'bg-[#9d86e9]/15 border-[#9d86e9] shadow-md'
                         : 'bg-[#1c1833]/60 border-[#2b2746] hover:border-[#9d86e9]/40'
                     }`}
                   >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                    <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                       isSelected ? 'bg-[#9d86e9] text-black font-bold' : 'bg-[#2b2746] text-[#7c779b]'
                     }`}>
-                      <Icon className="w-4 h-4" />
+                      <Icon className="w-5 h-5" />
                     </div>
 
                     <div className="flex flex-col flex-1 min-w-0">
@@ -209,11 +149,23 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
         <div className="pt-2 shrink-0 border-t border-[#2b2746]">
           <button
             onClick={handleSave}
-            className="w-full py-3 rounded-2xl bg-gradient-to-r from-[#9d86e9] to-[#7c5cdb] hover:from-[#b19cf5] hover:to-[#8c6de6] text-black font-extrabold text-xs sm:text-sm shadow-lg shadow-[#9d86e9]/20 transition-all active:scale-[0.98]"
+            className="w-full py-3 rounded-xl bg-[#9d86e9] hover:bg-[#8b72e0] text-[#0c0c14] font-extrabold text-sm transition-all shadow-lg active:scale-98 cursor-pointer"
           >
-            Save Preferences
+            Apply Mode
           </button>
         </div>
+
+        {/* Age Verification Modal */}
+        <AgeVerificationModal
+          isOpen={showAgeModal}
+          onConfirm={() => {
+            setSelectedRating('18+');
+            setShowAgeModal(false);
+          }}
+          onCancel={() => {
+            setShowAgeModal(false);
+          }}
+        />
       </div>
     </div>
   );

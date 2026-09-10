@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Heart, Menu, X, Settings, Compass, Grid, Clock, Bookmark, BarChart3, FolderHeart, Eye, EyeOff } from 'lucide-react';
 import { getIncognitoMode, toggleIncognitoMode } from '../services/storage';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 
 interface NavbarProps {
   activeSourceName?: string;
@@ -13,6 +14,8 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
   const [showDonationModal, setShowDonationModal] = useState(false);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
   const [incognito, setIncognito] = useState(() => getIncognitoMode());
+
+  useBodyScrollLock(showDonationModal || showMobileDrawer);
 
   useEffect(() => {
     const handleIncognitoChange = () => {

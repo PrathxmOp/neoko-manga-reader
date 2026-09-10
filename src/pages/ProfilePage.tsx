@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { getHistory, getBookmarks } from '../services/storage';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { Edit3, BookOpen, Clock, Star, Settings, ChevronRight } from 'lucide-react';
 
 const AVATARS = ['🔮', '⚡', '🔥', '🌸', '🎭', '🐉', '🌙', '💎', '🎨', '🦊', '🌊', '⭐'];
@@ -10,6 +11,7 @@ export const ProfilePage: React.FC = () => {
   const navigate = useNavigate();
   const { user, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  useBodyScrollLock(isEditing);
   const [editName, setEditName] = useState(user?.username || 'Reader');
   const [editAvatar, setEditAvatar] = useState(user?.avatar || '🔮');
 

@@ -83,8 +83,9 @@ export interface HistoryItem {
 }
 
 export interface ContentFilterSettings {
-  contentRating: 'Safe' | 'Suggestive' | 'Erotica' | 'All';
+  contentRating: 'normal' | '18+';
   languages: string[];
+  extensionModes?: Record<string, 'normal' | '18+'>;
 }
 
 export interface ReaderSettings {

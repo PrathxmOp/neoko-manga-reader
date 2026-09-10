@@ -41,8 +41,7 @@ export const SearchBrowsePage: React.FC = () => {
 
     getSources().then(sources => {
       if (sources && sources.length > 0) {
-        const enSources = sources.filter(s => (s.lang === 'en' || s.lang === 'all') && isSourceEnabled(s.id, s.name));
-        const listToUse = enSources.length > 0 ? enSources : sources.filter(s => isSourceEnabled(s.id, s.name));
+        const listToUse = sources.filter(s => isSourceEnabled(s.id, s.name));
 
         const seenNames = new Set<string>();
         const unique: { id: string; name: string }[] = [];

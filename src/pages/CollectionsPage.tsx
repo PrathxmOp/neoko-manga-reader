@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getCollections, saveCollection, deleteCollection } from '../services/storage';
 import { MangaCollection } from '../types/manga';
 import { useToast } from '../contexts/ToastContext';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { FolderHeart, Plus, Trash2, Edit2, BookOpen, Layers, X, Folder } from 'lucide-react';
 
 export const CollectionsPage: React.FC = () => {
@@ -11,6 +12,8 @@ export const CollectionsPage: React.FC = () => {
   const [collections, setCollections] = useState<MangaCollection[]>(getCollections());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCollection, setEditingCollection] = useState<MangaCollection | null>(null);
+
+  useBodyScrollLock(showCreateModal);
 
   // Form State
   const [nameInput, setNameInput] = useState('');

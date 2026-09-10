@@ -5,6 +5,7 @@ import { addHistoryItem, getHistory, getReaderSettings, saveReaderSettings, upda
 import { ChapterNote } from '../types/manga';
 import { useToast } from '../contexts/ToastContext';
 import { KeyboardShortcutsModal } from '../components/KeyboardShortcutsModal';
+import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { 
   ArrowLeft, ChevronLeft, ChevronRight, Settings, 
   Maximize, Minimize, Loader2, ScrollText, FileText, LayoutGrid, 
@@ -32,6 +33,7 @@ export const ReaderPage: React.FC = () => {
 
   // Chapter Notes state
   const [showNotesModal, setShowNotesModal] = useState(false);
+  useBodyScrollLock(showSettingsDrawer || showChapterListModal || showNotesModal);
   const [newNoteInput, setNewNoteInput] = useState('');
   const [chapterNotes, setChapterNotes] = useState<ChapterNote[]>([]);
 
@@ -52,13 +54,146 @@ export const ReaderPage: React.FC = () => {
   const initialStartPageRef = useRef(1);
 
   const lastTapRef = useRef<number>(0);
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+  const panRef = useRef(panOffset);
+  panRef.current = panOffset;
+  const settingsRef = useRef(settings);
+  settingsRef.current = settings;
+  const prevZoomRef = useRef(zoom);
+
+  // Synchronize scroll position when zoom changes in webtoon mode so view doesn't jump to top
+  useEffect(() => {
+    if (settings.mode === 'webtoon' && prevZoomRef.current !== zoom) {
+      const ratio = zoom / prevZoomRef.current;
+      if (ratio > 0 && !isNaN(ratio)) {
+        const currentWindowScroll = window.scrollY;
+        if (currentWindowScroll > 0) {
+          window.scrollTo({ top: currentWindowScroll * ratio, behavior: 'instant' as ScrollBehavior });
+        }
+        if (containerRef.current && containerRef.current.scrollTop > 0) {
+          containerRef.current.scrollTop = containerRef.current.scrollTop * ratio;
+        }
+      }
+    }
+    prevZoomRef.current = zoom;
+  }, [zoom, settings.mode]);
+
+  useEffect(() => {
+    let initialDist: number | null = null;
+    let initialZoomVal = zoomRef.current;
+    let initialPan = { ...panRef.current };
+    let initialFocalPoint = { x: 0, y: 0 };
+    let singleTouchStart = { x: 0, y: 0 };
+
+    const isUIElement = (target: HTMLElement | null): boolean => {
+      if (!target) return false;
+      return !!(
+        target.closest('header') ||
+        target.closest('footer') ||
+        target.closest('button') ||
+        target.closest('input') ||
+        target.closest('select') ||
+        target.closest('.glass-panel')
+      );
+    };
+
+    const onTouchStart = (e: TouchEvent) => {
+      if (isUIElement(e.target as HTMLElement)) return;
+      const isWebtoon = settingsRef.current.mode === 'webtoon';
+
+      if (e.touches.length === 2) {
+        if (e.cancelable) e.preventDefault();
+      } else if (!isWebtoon && zoomRef.current > 100) {
+        // Only block single-finger scroll in non-webtoon modes when zoomed
+        if (e.cancelable) e.preventDefault();
+      }
+
+      if (e.touches.length === 2) {
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        initialDist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+        initialFocalPoint = {
+          x: (t0.clientX + t1.clientX) / 2,
+          y: (t0.clientY + t1.clientY) / 2,
+        };
+        initialZoomVal = zoomRef.current;
+        initialPan = { ...panRef.current };
+      } else if (e.touches.length === 1) {
+        singleTouchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        initialPan = { ...panRef.current };
+      }
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (isUIElement(e.target as HTMLElement)) return;
+      const isWebtoon = settingsRef.current.mode === 'webtoon';
+
+      if (e.touches.length === 2 && initialDist !== null && initialDist > 0) {
+        if (e.cancelable) e.preventDefault();
+        const t0 = e.touches[0];
+        const t1 = e.touches[1];
+        const dist = Math.hypot(t0.clientX - t1.clientX, t0.clientY - t1.clientY);
+
+        const scaleRatio = dist / initialDist;
+        const targetZoom = Math.min(Math.max(Math.round(initialZoomVal * scaleRatio), 100), 300);
+
+        setZoom(targetZoom);
+        if (targetZoom === 100) {
+          setPanOffset({ x: 0, y: 0 });
+        }
+      } else if (e.touches.length === 1 && zoomRef.current > 100) {
+        if (!isWebtoon) {
+          // Single / Double mode: 2D touch drag bounded
+          if (e.cancelable) e.preventDefault();
+          const dx = e.touches[0].clientX - singleTouchStart.x;
+          const dy = e.touches[0].clientY - singleTouchStart.y;
+          const maxPanX = Math.max(0, (window.innerWidth * (zoomRef.current / 100) - window.innerWidth) / 2);
+          const maxPanY = Math.max(0, (window.innerHeight * (zoomRef.current / 100) - window.innerHeight) / 2);
+          const clampedX = Math.min(Math.max(initialPan.x + dx, -maxPanX), maxPanX);
+          const clampedY = Math.min(Math.max(initialPan.y + dy, -maxPanY), maxPanY);
+          setPanOffset({ x: clampedX, y: clampedY });
+        }
+      }
+    };
+
+    const onTouchEnd = (e: TouchEvent) => {
+      if (e.touches.length === 1) {
+        singleTouchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        initialPan = { ...panRef.current };
+        initialDist = null;
+      } else if (e.touches.length === 0) {
+        initialDist = null;
+      }
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: false });
+    window.addEventListener('touchmove', onTouchMove, { passive: false });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    window.addEventListener('touchcancel', onTouchEnd, { passive: true });
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, []);
 
   const handleDoubleTapZoom = () => {
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      setZoom(prev => (prev === 100 ? 175 : 100));
-      showToast(zoom === 100 ? 'Zoomed 1.75x' : 'Reset Zoom', 'info');
+      if (zoom > 100) {
+        setZoom(100);
+        setPanOffset({ x: 0, y: 0 });
+        showToast('Reset Zoom', 'info');
+      } else {
+        setZoom(175);
+        showToast('Zoomed 1.75x', 'info');
+      }
     }
     lastTapRef.current = now;
   };
@@ -617,15 +752,31 @@ export const ReaderPage: React.FC = () => {
         </div>
       )}
 
-      {/* Main Reader View Container with Zoom scale & Color Filters */}
+      {/* Main Reader View Container (Kagane.to style auto scroll surface) */}
       <div 
         ref={containerRef} 
-        className="flex-1 flex flex-col items-center justify-center w-full min-h-screen pt-16 pb-24 transition-all duration-200"
-        style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', ...getColorFilterStyle() }}
+        className="reader-content flex-1 w-full overflow-auto text-center relative min-h-screen pt-16 pb-24"
+        style={{
+          overflowX: 'auto',
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          ...getColorFilterStyle()
+        }}
       >
         {settings.mode === 'webtoon' ? (
-          /* Webtoon Continuous Strip */
-          <div className="flex flex-col items-center w-full max-w-3xl mx-auto space-y-2 px-2">
+          /* Webtoon Continuous Strip (Kagane.to style width-based zoom surface) */
+          <div 
+            className="reader-pages-content flex flex-col items-center mx-auto space-y-2 px-2"
+            data-zoom-surface="true"
+            style={{
+              width: zoom > 100 ? `${zoom}%` : '100%',
+              maxWidth: zoom > 100 ? 'none' : '48rem',
+              minWidth: '100%',
+              lineHeight: 0,
+              fontSize: '0px',
+              position: 'relative',
+            }}
+          >
             {pages.map((url, index) => {
               const isLoaded = loadedPages.has(index);
               const isFailed = failedPages.has(index);
@@ -660,10 +811,10 @@ export const ReaderPage: React.FC = () => {
                 <div 
                   key={index} 
                   id={`reader-page-${index + 1}`}
-                  className="relative w-full reader-page-img bg-[#0B0D13] min-h-[350px] flex items-center justify-center rounded-xl overflow-hidden group select-none"
+                  className="relative w-full reader-page-img bg-[#0B0D13] flex items-center justify-center rounded-xl overflow-hidden group select-none"
                 >
                   {!isLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10" style={{ minHeight: '350px' }}>
                       <Loader2 className="w-7 h-7 animate-spin text-primary/80" />
                       <span className="text-[11px] font-semibold text-outline">Loading Page {index + 1}...</span>
                     </div>
@@ -696,7 +847,11 @@ export const ReaderPage: React.FC = () => {
           </div>
         ) : settings.mode === 'double' ? (
           /* Double Page Spread */
-          <div className="relative w-full max-w-6xl mx-auto px-4 flex items-center justify-center gap-2 min-h-[85vh] my-auto">
+          <div className="relative w-full max-w-6xl mx-auto px-4 flex items-center justify-center gap-2 min-h-[85vh] my-auto" style={{
+              transform: zoom !== 100 ? `translate3d(${panOffset.x}px, ${panOffset.y}px, 0px) scale(${zoom / 100})` : 'none',
+              transformOrigin: 'center center',
+              willChange: zoom > 100 ? 'transform' : 'auto',
+            }}>
             {pages[currentPage - 1] && (
               <div className="relative flex-1 flex items-center justify-center min-h-[400px] select-none">
                 {failedPages.has(currentPage - 1) ? (
@@ -798,7 +953,11 @@ export const ReaderPage: React.FC = () => {
           </div>
         ) : (
           /* Single Page View */
-          <div className="relative w-full max-w-4xl mx-auto px-4 flex items-center justify-center min-h-[85vh] my-auto">
+          <div className="relative w-full max-w-4xl mx-auto px-4 flex items-center justify-center min-h-[85vh] my-auto" style={{
+              transform: zoom !== 100 ? `translate3d(${panOffset.x}px, ${panOffset.y}px, 0px) scale(${zoom / 100})` : 'none',
+              transformOrigin: 'center center',
+              willChange: zoom > 100 ? 'transform' : 'auto',
+            }}>
             {pages.length > 0 && (
               <div className="relative w-full flex items-center justify-center min-h-[500px] select-none">
                 {failedPages.has(currentPage - 1) ? (
