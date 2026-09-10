@@ -1397,7 +1397,11 @@ export async function getTrackers(): Promise<TrackerInfo[]> {
   try {
     const res = await queryGraphQL('{ trackers { nodes { id name icon isLoggedIn isTokenExpired authUrl trackRecords { totalCount } } } }');
     const nodes = res?.data?.trackers?.nodes || [];
-    return nodes.map((t: any) => ({
+    const filteredNodes = nodes.filter((t: any) => {
+      const lower = (t.name || '').toLowerCase();
+      return lower.includes('myanimelist') || lower.includes('anilist');
+    });
+    return filteredNodes.map((t: any) => ({
       id: t.id,
       name: t.name,
       icon: getImageUrl(t.icon),

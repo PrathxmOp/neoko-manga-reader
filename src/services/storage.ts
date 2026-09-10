@@ -570,18 +570,44 @@ export function getStorageUsage(): { used: number; items: number } {
 // ──────────────── Reading Stats ────────────────
 
 export function getReadingStats(): ReadingStats {
-  try {
-    const raw = localStorage.getItem(STATS_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch {}
-  return {
-    totalChaptersRead: 0,
-    totalReadingTimeMinutes: 0,
+  const actualReadChaptersCount = getReadChapters().size;
+  let stats: ReadingStats = {
+    totalChaptersRead: actualReadChaptersCount,
+    totalReadingTimeMinutes: actualReadChaptersCount * 3,
     genresRead: {},
-    dailyStreak: 0,
-    lastReadDate: '',
+    dailyStreak: actualReadChaptersCount > 0 ? 1 : 0,
+    lastReadDate: new Date().toISOString().split('T')[0],
     historyByDate: {},
   };
+
+  try {
+    const raw = localStorage.getItem(STATS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      stats = {
+        ...parsed,
+        totalChaptersRead: Math.max(parsed.totalChaptersRead || 0, actualReadChaptersCount),
+      };
+    }
+  } catch {}
+
+  return stats;
+}
+
+export function resetReadingStats(): ReadingStats {
+  const actualReadChaptersCount = getReadChapters().size;
+  const today = new Date().toISOString().split('T')[0];
+  const resetStats: ReadingStats = {
+    totalChaptersRead: actualReadChaptersCount,
+    totalReadingTimeMinutes: actualReadChaptersCount * 3,
+    genresRead: {},
+    dailyStreak: actualReadChaptersCount > 0 ? 1 : 0,
+    lastReadDate: today,
+    historyByDate: { [today]: actualReadChaptersCount },
+  };
+  localStorage.setItem(STATS_KEY, JSON.stringify(resetStats));
+  window.dispatchEvent(new Event('neoko_stats_changed'));
+  return resetStats;
 }
 
 export function updateReadingStats(chaptersCount = 1, minutesSpent = 1, genres: string[] = []): ReadingStats {

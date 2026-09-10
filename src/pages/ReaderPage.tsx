@@ -559,7 +559,6 @@ export const ReaderPage: React.FC = () => {
           pageIndex: startPage,
           totalPages: pageUrls.length,
         });
-        updateReadingStats(1, 2, mangaGenres);
         if (details?.mangaId) {
           setChapterNotes(getChapterNotes(details.mangaId));
         }

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { getReadingStats } from '../services/storage';
+import { getReadingStats, resetReadingStats } from '../services/storage';
 import { ReadingStats } from '../types/manga';
-import { BarChart3, Flame, Clock, BookOpen, Sparkles, Trophy, Calendar, Award } from 'lucide-react';
+import { BarChart3, Flame, Clock, BookOpen, Sparkles, Trophy, Calendar, Award, RotateCcw } from 'lucide-react';
 
 export const StatsPage: React.FC = () => {
   const [stats, setStats] = useState<ReadingStats>(getReadingStats());
@@ -13,6 +13,13 @@ export const StatsPage: React.FC = () => {
     window.addEventListener('neoko_stats_changed', handleStatsChange);
     return () => window.removeEventListener('neoko_stats_changed', handleStatsChange);
   }, []);
+
+  const handleResetStats = () => {
+    if (confirm('Recalculate and reset reading statistics based on actual read chapters?')) {
+      const reset = resetReadingStats();
+      setStats(reset);
+    }
+  };
 
   const totalHours = Math.floor(stats.totalReadingTimeMinutes / 60);
   const remainingMins = stats.totalReadingTimeMinutes % 60;
@@ -51,6 +58,15 @@ export const StatsPage: React.FC = () => {
             </p>
           </div>
         </div>
+
+        <button
+          onClick={handleResetStats}
+          className="px-3 py-1.5 rounded-xl bg-[#1c1833] hover:bg-[#252042] text-slate-300 hover:text-white border border-[#2b2746] text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          title="Recalculate & Sync Stats"
+        >
+          <RotateCcw className="w-3.5 h-3.5 text-[#9d86e9]" />
+          <span className="hidden sm:inline">Recalculate</span>
+        </button>
       </div>
 
       {/* Top 4 KPI Metrics */}

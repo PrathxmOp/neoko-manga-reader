@@ -1009,7 +1009,7 @@ export const SettingsPage: React.FC = () => {
             {activeTab === 'tracking' && (
               <div className="space-y-4">
                 <SectionTitle title="Manga Trackers" />
-                <p className="font-sans text-xs text-outline">Connect your MyAnimeList, AniList, and other manga tracking accounts to automatically sync reading progress across devices.</p>
+                <p className="font-sans text-xs text-outline">Connect your MyAnimeList and AniList accounts to automatically sync reading progress across devices.</p>
                 <div className="space-y-3">
                   {trackers.map(tracker => (
                     <div key={tracker.id} className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
