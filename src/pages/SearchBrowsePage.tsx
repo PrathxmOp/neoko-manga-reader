@@ -6,8 +6,9 @@ import { getEnabledSourceIds, isSourceEnabled, getRecentSearches, addRecentSearc
 import { useToast } from '../contexts/ToastContext';
 import { MangaCard } from '../components/MangaCard';
 import { MangaListItem } from '../components/MangaListItem';
+import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaInfoModal } from '../components/MangaInfoModal';
-import { Search, SlidersHorizontal, Bookmark, Dices, List, LayoutGrid, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Shuffle } from 'lucide-react';
+import { Search, SlidersHorizontal, Bookmark, Dices, List, LayoutGrid, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Shuffle, Sparkles } from 'lucide-react';
 
 export const SearchBrowsePage: React.FC = () => {
   const navigate = useNavigate();
@@ -64,13 +65,13 @@ export const SearchBrowsePage: React.FC = () => {
     return () => window.removeEventListener('neoko_content_filter_changed', handleFilterChange);
   }, []);
 
-  // Instant real-time live search typing handler (no need to press search or enter!)
+  // Instant real-time live search typing & source selection handler
   useEffect(() => {
     const timer = setTimeout(() => {
       loadAndSearch(query, 1, false);
-    }, 350);
+    }, 300);
     return () => clearTimeout(timer);
-  }, [query]);
+  }, [query, selectedSourceId]);
 
   const loadAndSearch = async (
     searchQuery: string = query,
@@ -81,10 +82,12 @@ export const SearchBrowsePage: React.FC = () => {
     setLoading(true);
     setCurrentPage(page);
     try {
-      let targetSourceIds = getEnabledSourceIds();
       const activeSource = sourceIdOverride !== undefined ? sourceIdOverride : selectedSourceId;
+      let targetSourceIds: string[] = [];
       if (activeSource !== 'all') {
         targetSourceIds = [activeSource];
+      } else {
+        targetSourceIds = getEnabledSourceIds(availableSources.map(s => s.id));
       }
 
       const res = await searchMultiSource(targetSourceIds, searchQuery, page, forceRefresh);
@@ -119,29 +122,54 @@ export const SearchBrowsePage: React.FC = () => {
     if (query.trim()) {
       const updated = addRecentSearch(query.trim());
       setRecentSearches(updated);
+      loadAndSearch(query, 1, true);
     }
-    loadAndSearch(query.trim(), 1, false);
   };
+
+  // Content rating filter
+  let displayList = filterMangaByContentRating(mangaList);
+
+  // Search filter (fuzzy vs exact)
+  if (query.trim()) {
+    const qLower = query.toLowerCase().trim();
+    if (searchMode === 'exact') {
+      displayList = displayList.filter(m => m.title.toLowerCase().includes(qLower));
+    }
+  }
+
+  // Sorting
+  displayList = [...displayList].sort((a, b) => {
+    if (sortOption === 'Latest') {
+      return (b.unreadCount || 0) - (a.unreadCount || 0);
+    }
+    if (sortOption === 'Popularity') {
+      return (b.inLibrary ? 1 : 0) - (a.inLibrary ? 1 : 0);
+    }
+    if (sortOption === 'Alphabetical') {
+      return a.title.localeCompare(b.title);
+    }
+    return 0; // Relevance default
+  });
+
+  const filteredMangaList = displayList;
 
   const getPageStrip = () => {
     const start = Math.max(1, currentPage - 1);
     return [start, start + 1, start + 2, start + 3, start + 4];
   };
 
-  const filteredMangaList = filterMangaByContentRating(mangaList);
-
   return (
     <main className="flex flex-col relative w-full pt-16 sm:pt-20 pb-24 px-3 sm:px-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
-      {/* 1. Search Header Input */}
-      <section className="w-full">
-        <form onSubmit={handleSearchSubmit} className="w-full flex items-center gap-2">
-          <div className="relative flex-1 flex items-center bg-[#161327] rounded-xl px-4 py-3 border border-[#2b2746] focus-within:border-[#9d86e9] transition-all">
-            <Search className="w-4 h-4 text-[#7c779b] mr-3 shrink-0" />
+      {/* 1. Header Search Bar & Source Filter */}
+      <section className="bg-[#161327] rounded-2xl border border-[#2b2746] p-4 shadow-xl space-y-3">
+        <form onSubmit={handleSearchSubmit} className="flex items-center gap-2">
+          <div className="flex-1 flex items-center bg-[#1c1833] rounded-xl px-4 py-3 border border-[#2b2746] focus-within:border-[#9d86e9] transition-all">
+            <Search className="w-5 h-5 text-[#7c779b] mr-3 shrink-0" />
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by title or select source..."
+              placeholder="Search titles, authors, genres across all sources..."
               className="w-full bg-transparent text-white text-sm placeholder-[#7c779b] focus:outline-none"
             />
             {query && (
@@ -159,10 +187,9 @@ export const SearchBrowsePage: React.FC = () => {
           </div>
           <button
             type="submit"
-            className="w-12 h-11 rounded-xl bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] flex items-center justify-center font-bold shadow-md transition-all active:scale-95 shrink-0"
-            title="Submit Search"
+            className="px-5 py-3 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-bold text-xs hover:bg-[#b09cf5] transition-all shadow-md shrink-0 flex items-center gap-2"
           >
-            <Search className="w-5 h-5 stroke-[2.5]" />
+            <span>Search</span>
           </button>
         </form>
 
@@ -170,25 +197,29 @@ export const SearchBrowsePage: React.FC = () => {
         {recentSearches.length > 0 && (
           <div className="flex items-center justify-between gap-2 mt-2 pt-2 border-t border-[#2b2746]/60 text-xs">
             <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-w-0">
-              <span className="text-[10px] font-bold text-[#7c779b] uppercase tracking-wider shrink-0 mr-1">Recent:</span>
-              {recentSearches.map(term => (
+              <span className="text-[10px] font-bold text-[#7c779b] uppercase tracking-wider shrink-0 mr-1 flex items-center gap-1">
+                <Sparkles className="w-3 h-3 text-[#9d86e9]" /> Recent:
+              </span>
+              {recentSearches.slice(0, 8).map(term => (
                 <div
                   key={term}
                   onClick={() => {
                     setQuery(term);
-                    loadAndSearch(term, 1, false);
+                    loadAndSearch(term, 1, true);
                   }}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#1c1833] hover:bg-[#282348] text-slate-200 border border-[#2b2746] text-[11px] font-medium shrink-0 transition-all cursor-pointer group"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1c1833] hover:bg-[#282348] text-slate-200 border border-[#2b2746] hover:border-[#9d86e9]/50 text-[11px] font-medium shrink-0 transition-all cursor-pointer group shadow-sm"
                 >
-                  <Search className="w-3 h-3 text-[#9d86e9]" />
+                  <Search className="w-3 h-3 text-[#9d86e9] group-hover:scale-110 transition-transform" />
                   <span>{term}</span>
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       const updated = removeRecentSearch(term);
                       setRecentSearches(updated);
                     }}
-                    className="ml-1 text-[#7c779b] hover:text-white"
+                    className="ml-0.5 p-0.5 rounded-full text-[#7c779b] hover:text-white hover:bg-white/10 transition-colors"
+                    title="Remove item"
                   >
                     <X className="w-3 h-3" />
                   </button>
@@ -196,11 +227,12 @@ export const SearchBrowsePage: React.FC = () => {
               ))}
             </div>
             <button
+              type="button"
               onClick={() => {
                 clearRecentSearches();
                 setRecentSearches([]);
               }}
-              className="text-[10px] font-bold text-[#7c779b] hover:text-rose-400 shrink-0 ml-1 underline"
+              className="text-[10px] font-bold text-[#7c779b] hover:text-rose-400 shrink-0 ml-1 underline transition-colors"
             >
               Clear All
             </button>
@@ -218,8 +250,11 @@ export const SearchBrowsePage: React.FC = () => {
               key={src.id}
               type="button"
               onClick={() => {
-                setSelectedSourceId(src.id);
-                loadAndSearch(query, 1, false, src.id);
+                if (selectedSourceId !== src.id) {
+                  setSelectedSourceId(src.id);
+                  setMangaList([]);
+                  loadAndSearch(query, 1, true, src.id);
+                }
               }}
               className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
                 selectedSourceId === src.id
@@ -383,15 +418,21 @@ export const SearchBrowsePage: React.FC = () => {
         </div>
       ) : viewMode === 'list' ? (
         <div className="flex flex-col gap-3">
-          {filteredMangaList.map((manga, idx) => (
-            <MangaListItem
-              key={`${manga.sourceId}-${manga.id}-${idx}`}
-              manga={manga}
-              latestChapter={idx === 0 ? 'Ch. 2' : idx === 1 ? 'Ch. 41' : 'Vol. 3'}
-              updatedTime="7mo ago"
-              onInfoClick={(e) => handleOpenPreview(manga, e)}
-            />
-          ))}
+          {filteredMangaList.map((manga, idx) => {
+            const rawUploadDate = manga.chapters?.[0]?.uploadDate;
+            const timestamp = rawUploadDate
+              ? (Number(rawUploadDate) || new Date(rawUploadDate).getTime())
+              : (Date.now() - ((idx + 1) * 2 * 3600 * 1000));
+            return (
+              <MangaListItem
+                key={`${manga.sourceId}-${manga.id}-${idx}`}
+                manga={manga}
+                latestChapter={manga.chapters?.[0]?.name || (idx === 0 ? 'Ch. 2' : idx === 1 ? 'Ch. 41' : 'Vol. 3')}
+                updatedTime={formatTimeAgo(timestamp)}
+                onInfoClick={(e) => handleOpenPreview(manga, e)}
+              />
+            );
+          })}
         </div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">

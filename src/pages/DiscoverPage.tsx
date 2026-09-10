@@ -4,6 +4,7 @@ import { Manga, HistoryItem } from '../types/manga';
 import { searchMultiSource, filterMangaByContentRating, getSourceName } from '../services/suwayomiApi';
 import { getEnabledSourceIds, getCachedData, setCachedData, getContinueReadingList, getTopGenres, isSourceEnabled } from '../services/storage';
 import { MangaCard } from '../components/MangaCard';
+import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaListItem } from '../components/MangaListItem';
 import { ContentLanguageModal } from '../components/ContentLanguageModal';
 import { MangaInfoModal } from '../components/MangaInfoModal';
@@ -548,10 +549,11 @@ export const DiscoverPage: React.FC = () => {
                 ? manga.chapters[0].name 
                 : (manga.chapterCount ? `Ch. ${manga.chapterCount}` : `Ch. ${idx + 12}`);
               
-              const relativeTimes = ['12m ago', '35m ago', '1h ago', '2h ago', '3h ago', '5h ago', '8h ago', '1d ago'];
-              const updatedLabel = manga.chapters?.[0]?.uploadDate 
-                ? new Date(Number(manga.chapters[0].uploadDate) || manga.chapters[0].uploadDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
-                : relativeTimes[idx % relativeTimes.length];
+              const rawUploadDate = manga.chapters?.[0]?.uploadDate;
+              const timestamp = rawUploadDate
+                ? (Number(rawUploadDate) || new Date(rawUploadDate).getTime())
+                : (Date.now() - ((idx + 1) * 35 * 60 * 1000));
+              const updatedLabel = formatTimeAgo(timestamp);
 
               return (
                 <MangaListItem

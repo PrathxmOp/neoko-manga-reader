@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
-import { getChapterPages, getChapterDetails, getMangaDetails, Chapter } from '../services/suwayomiApi';
-import { addHistoryItem, getHistory, getReaderSettings, saveReaderSettings, updateReadingStats, getChapterNotes, saveChapterNote, deleteChapterNote } from '../services/storage';
+import { getChapterPages, getChapterDetails, getMangaDetails, fetchAuthenticatedImageBlob, Chapter, updateChapterRead, trackProgress, autoBindTrackers } from '../services/suwayomiApi';
+import { addHistoryItem, getHistory, getReaderSettings, saveReaderSettings, updateReadingStats, getChapterNotes, saveChapterNote, deleteChapterNote, getGeminiApiKey, getTranslationLanguage, getAiTranslationEnabled } from '../services/storage';
+import { translateMangaPage, TranslationBubble } from '../services/translationService';
 import { ChapterNote } from '../types/manga';
 import { useToast } from '../contexts/ToastContext';
 import { KeyboardShortcutsModal } from '../components/KeyboardShortcutsModal';
@@ -12,8 +13,69 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Keyboard, ChevronUp, ChevronDown, List, 
   MessageSquare, Home, Pencil, Play, Pause, Eye, Sun, Moon,
   Scaling, Maximize2, SkipBack, SkipForward, Sliders, X, Check, StickyNote, Trash2,
-  AlertCircle, RefreshCw
+  AlertCircle, RefreshCw, Languages, Sparkles
 } from 'lucide-react';
+
+interface MangaPageImgProps {
+  pageIndex: number;
+  originalUrl: string;
+  alt: string;
+  className?: string;
+  loading?: 'lazy' | 'eager';
+  onLoad: (index: number) => void;
+  onError: (index: number) => void;
+}
+
+const MangaPageImg: React.FC<MangaPageImgProps> = ({
+  pageIndex,
+  originalUrl,
+  alt,
+  className,
+  loading = 'lazy',
+  onLoad,
+  onError,
+}) => {
+  const [src, setSrc] = useState(originalUrl);
+  const [attemptState, setAttemptState] = useState<'initial' | 'cacheBuster' | 'blob' | 'failed'>('initial');
+
+  useEffect(() => {
+    setSrc(originalUrl);
+    setAttemptState('initial');
+  }, [originalUrl]);
+
+  const handleErr = async () => {
+    if (attemptState === 'initial') {
+      setAttemptState('cacheBuster');
+      const busterUrl = originalUrl + (originalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+      setSrc(busterUrl);
+    } else if (attemptState === 'cacheBuster') {
+      setAttemptState('blob');
+      const blobUrl = await fetchAuthenticatedImageBlob(originalUrl);
+      if (blobUrl) {
+        setSrc(blobUrl);
+      } else {
+        setAttemptState('failed');
+        onError(pageIndex);
+      }
+    } else {
+      setAttemptState('failed');
+      onError(pageIndex);
+    }
+  };
+
+  return (
+    <img
+      src={src}
+      alt={alt}
+      loading={loading}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      onLoad={() => onLoad(pageIndex)}
+      onError={handleErr}
+      className={className}
+    />
+  );
+};
 
 export const ReaderPage: React.FC = () => {
   const { chapterId } = useParams<{ chapterId: string }>();
@@ -36,6 +98,57 @@ export const ReaderPage: React.FC = () => {
   useBodyScrollLock(showSettingsDrawer || showChapterListModal || showNotesModal);
   const [newNoteInput, setNewNoteInput] = useState('');
   const [chapterNotes, setChapterNotes] = useState<ChapterNote[]>([]);
+
+  // Live Translation state
+  const isAiTranslationGloballyEnabled = getAiTranslationEnabled();
+  const [isTranslationEnabled, setIsTranslationEnabled] = useState(false);
+  const [translationLang, setTranslationLang] = useState(getTranslationLanguage());
+  const [translations, setTranslations] = useState<Record<number, { loading: boolean; bubbles?: TranslationBubble[]; error?: string }>>({});
+
+  const handleTranslatePage = async (pageIndex: number, forceRefresh: boolean = false) => {
+    if (!getAiTranslationEnabled()) return;
+    const apiKey = getGeminiApiKey();
+    if (!apiKey) {
+      showToast('Gemini API key is required for live translation. Please set it in Settings.', 'error');
+      return;
+    }
+
+    if (!pages[pageIndex]) return;
+
+    setTranslations(prev => ({
+      ...prev,
+      [pageIndex]: { loading: true }
+    }));
+
+    try {
+      const bubbles = await translateMangaPage(pages[pageIndex], translationLang, apiKey, forceRefresh);
+      setTranslations(prev => ({
+        ...prev,
+        [pageIndex]: { loading: false, bubbles }
+      }));
+    } catch (err: any) {
+      setTranslations(prev => ({
+        ...prev,
+        [pageIndex]: { loading: false, error: err?.message || 'Translation failed' }
+      }));
+    }
+  };
+
+  const toggleTranslation = () => {
+    if (!getAiTranslationEnabled()) {
+      showToast('AI Translation is currently disabled in Settings.', 'error');
+      return;
+    }
+    const apiKey = getGeminiApiKey();
+    if (!isTranslationEnabled && !apiKey) {
+      showToast('Please set your Gemini API key in Settings -> AI & Translation to use Live Translation', 'error');
+      navigate('/settings?tab=ai');
+      return;
+    }
+    const nextState = !isTranslationEnabled;
+    setIsTranslationEnabled(nextState);
+    showToast(nextState ? `Live Translation active (${translationLang})` : 'Live Translation disabled', nextState ? 'success' : 'info');
+  };
 
   // Chapter navigation states
   const [allChapters, setAllChapters] = useState<Chapter[]>([]);
@@ -227,15 +340,40 @@ export const ReaderPage: React.FC = () => {
     }
   };
 
+  const handleManualRetryPage = async (index: number) => {
+    setFailedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
+    setLoadedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
+
+    const rawUrl = pages[index];
+    if (rawUrl) {
+      const blobUrl = await fetchAuthenticatedImageBlob(rawUrl);
+      if (blobUrl) {
+        setPages(prev => {
+          const next = [...prev];
+          next[index] = blobUrl;
+          return next;
+        });
+      }
+    }
+  };
+
+  // Sequential image preloader to prevent network congestion/timeouts over proxy tunnels
   useEffect(() => {
     if (pages.length === 0) return;
     setLoadedPages(new Set());
 
     let isMounted = true;
-    pages.forEach((url, idx) => {
+    let currentIndex = 0;
+
+    const loadNextSequentially = () => {
+      if (!isMounted || currentIndex >= pages.length) return;
+      const idx = currentIndex;
+      currentIndex++;
+
       const img = new Image();
-      img.src = url;
-      const markLoaded = () => {
+      img.src = pages[idx];
+
+      const onDone = () => {
         if (isMounted) {
           setLoadedPages(prev => {
             if (prev.has(idx)) return prev;
@@ -243,16 +381,54 @@ export const ReaderPage: React.FC = () => {
             next.add(idx);
             return next;
           });
+          setTimeout(loadNextSequentially, 80);
         }
       };
-      img.onload = markLoaded;
-      img.onerror = markLoaded;
-    });
+
+      img.onload = onDone;
+      img.onerror = onDone;
+    };
+
+    // Run 2 parallel sequential queues to balance fast loading & zero network drops
+    loadNextSequentially();
+    if (pages.length > 1) {
+      setTimeout(loadNextSequentially, 150);
+    }
 
     return () => {
       isMounted = false;
     };
   }, [pages]);
+
+  // Auto-translate visible pages when live translation is active
+  useEffect(() => {
+    if (!isTranslationEnabled || pages.length === 0) return;
+
+    const pagesToTranslate: number[] = [];
+    if (settings.mode === 'single') {
+      pagesToTranslate.push(currentPage - 1);
+    } else if (settings.mode === 'double') {
+      pagesToTranslate.push(currentPage - 1);
+      if (currentPage < pages.length) {
+        pagesToTranslate.push(currentPage);
+      }
+    } else if (settings.mode === 'webtoon') {
+      const current = currentPage - 1;
+      [current - 1, current, current + 1].forEach(idx => {
+        if (idx >= 0 && idx < pages.length) {
+          pagesToTranslate.push(idx);
+        }
+      });
+    }
+
+    pagesToTranslate.forEach(idx => {
+      if (idx >= 0 && idx < pages.length && loadedPages.has(idx)) {
+        if (!translations[idx] && !failedPages.has(idx)) {
+          handleTranslatePage(idx);
+        }
+      }
+    });
+  }, [isTranslationEnabled, currentPage, pages, loadedPages, settings.mode, translationLang]);
 
   const isChapterLoaded = pages.length > 0 && loadedPages.size >= pages.length;
 
@@ -273,7 +449,7 @@ export const ReaderPage: React.FC = () => {
 
   const [searchParams] = useSearchParams();
 
-  // Continuously sync history progress whenever page changes
+  // Continuously sync history progress & Suwayomi/Tracker read status whenever page changes
   useEffect(() => {
     if (pages.length > 0 && chapterDetails && chapterId) {
       addHistoryItem({
@@ -285,6 +461,16 @@ export const ReaderPage: React.FC = () => {
         pageIndex: currentPage,
         totalPages: pages.length,
       });
+
+      // Mark chapter as read in Suwayomi DB & sync MAL/AniList when user reaches >70% or last page
+      const numChapterId = parseInt(String(chapterId), 10);
+      if (!isNaN(numChapterId) && (currentPage >= Math.ceil(pages.length * 0.7) || currentPage === pages.length)) {
+        updateChapterRead(numChapterId, true).then(() => {
+          if (chapterDetails.mangaId) {
+            trackProgress(chapterDetails.mangaId);
+          }
+        }).catch(err => console.error('Failed to sync chapter read status to server:', err));
+      }
     }
   }, [currentPage, pages.length, chapterId, chapterDetails]);
 
@@ -316,6 +502,7 @@ export const ReaderPage: React.FC = () => {
       if (details) {
         setChapterDetails(details);
         if (details.mangaId) {
+          autoBindTrackers(details.mangaId, details.mangaTitle || '').catch(err => console.error('Auto bind error in reader:', err));
           try {
             const mangaData = await getMangaDetails(details.mangaId);
             if (mangaData) {
@@ -726,6 +913,24 @@ export const ReaderPage: React.FC = () => {
               )}
             </button>
 
+            {/* Live AI Translation Trigger */}
+            {isAiTranslationGloballyEnabled && (
+              <button
+                onClick={toggleTranslation}
+                className={`p-2 rounded-xl transition-all border border-white/5 relative ${
+                  isTranslationEnabled
+                    ? 'bg-[#9d86e9] text-[#0c0c14] shadow-lg shadow-[#9d86e9]/20 font-bold'
+                    : 'bg-surface-container-high hover:bg-surface-bright text-outline hover:text-on-surface'
+                }`}
+                title={isTranslationEnabled ? `Live Translation Active (${translationLang})` : 'Enable Live AI Translation'}
+              >
+                <Languages className="w-4 h-4" />
+                {isTranslationEnabled && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
+                )}
+              </button>
+            )}
+
             {/* Reader Settings Drawer Trigger */}
             <button
               onClick={() => setShowSettingsDrawer(true)}
@@ -741,6 +946,38 @@ export const ReaderPage: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Floating Live AI Translation Badge */}
+      {showChrome && isAiTranslationGloballyEnabled && isTranslationEnabled && (
+        <div className="fixed top-16 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#161327]/95 border border-[#9d86e9]/50 text-xs font-semibold text-white shadow-2xl backdrop-blur-md animate-fade-in">
+          <div className="flex items-center gap-1.5 text-[#9d86e9]">
+            <Languages className="w-3.5 h-3.5" />
+            <span className="font-bold">Live AI Translation ({translationLang})</span>
+          </div>
+          <div className="h-3 w-px bg-white/20" />
+          <button
+            onClick={() => {
+              if (settings.mode === 'single') handleTranslatePage(currentPage - 1, true);
+              else if (settings.mode === 'double') {
+                handleTranslatePage(currentPage - 1, true);
+                if (currentPage < pages.length) handleTranslatePage(currentPage, true);
+              } else if (settings.mode === 'webtoon') handleTranslatePage(currentPage - 1, true);
+            }}
+            className="hover:text-[#9d86e9] transition-colors text-[11px] font-bold flex items-center gap-1 cursor-pointer"
+            title="Retranslate current page"
+          >
+            <RefreshCw className="w-3 h-3" />
+            <span>Retranslate</span>
+          </button>
+          <button
+            onClick={toggleTranslation}
+            className="p-0.5 hover:bg-white/10 rounded-full transition-colors text-outline hover:text-white ml-1 cursor-pointer"
+            title="Disable Live Translation"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Floating Chapter Loading Badge (Small loading circle until whole chapter loads) */}
       {!isChapterLoaded && pages.length > 0 && (
@@ -794,10 +1031,7 @@ export const ReaderPage: React.FC = () => {
                       <p className="text-[11px] text-[#7c779b]">The page image could not be loaded from source</p>
                     </div>
                     <button
-                      onClick={() => {
-                        setFailedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
-                        setLoadedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
-                      }}
+                      onClick={() => handleManualRetryPage(index)}
                       className="px-4 py-2 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
@@ -813,6 +1047,13 @@ export const ReaderPage: React.FC = () => {
                   id={`reader-page-${index + 1}`}
                   className="relative w-full reader-page-img bg-[#0B0D13] flex items-center justify-center rounded-xl overflow-hidden group select-none"
                 >
+                  <TranslationOverlay
+                    isEnabled={isTranslationEnabled}
+                    loading={translations[index]?.loading}
+                    bubbles={translations[index]?.bubbles}
+                    error={translations[index]?.error}
+                    onRetry={() => handleTranslatePage(index)}
+                  />
                   {!isLoaded && (
                     <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10" style={{ minHeight: '350px' }}>
                       <Loader2 className="w-7 h-7 animate-spin text-primary/80" />
@@ -826,16 +1067,15 @@ export const ReaderPage: React.FC = () => {
                     onDragStart={(e) => e.preventDefault()}
                     onClick={handleDoubleTapZoom}
                   />
-                  <img
-                    src={url}
+                  <MangaPageImg
+                    pageIndex={index}
+                    originalUrl={url}
                     alt={`Page ${index + 1}`}
                     loading="lazy"
-                    onContextMenu={(e) => e.preventDefault()}
-                    onDragStart={(e) => e.preventDefault()}
-                    onLoad={() => handleImageLoad(index)}
-                    onError={() => {
-                      setFailedPages(prev => new Set(prev).add(index));
-                      handleImageLoad(index);
+                    onLoad={handleImageLoad}
+                    onError={(idx) => {
+                      setFailedPages(prev => new Set(prev).add(idx));
+                      handleImageLoad(idx);
                     }}
                     className={`w-full h-auto block object-contain mx-auto transition-opacity duration-300 ${
                       isLoaded ? 'opacity-100' : 'opacity-0'
@@ -854,16 +1094,19 @@ export const ReaderPage: React.FC = () => {
             }}>
             {pages[currentPage - 1] && (
               <div className="relative flex-1 flex items-center justify-center min-h-[400px] select-none">
+                <TranslationOverlay
+                  isEnabled={isTranslationEnabled}
+                  loading={translations[currentPage - 1]?.loading}
+                  bubbles={translations[currentPage - 1]?.bubbles}
+                  error={translations[currentPage - 1]?.error}
+                  onRetry={() => handleTranslatePage(currentPage - 1)}
+                />
                 {failedPages.has(currentPage - 1) ? (
                   <div className="w-full min-h-[300px] bg-[#161327] rounded-2xl border border-red-500/20 p-6 flex flex-col items-center justify-center gap-3 text-center">
                     <AlertCircle className="w-8 h-8 text-red-400" />
                     <p className="text-xs text-white font-semibold">Page {currentPage} Failed to Load</p>
                     <button
-                      onClick={() => {
-                        const pIdx = currentPage - 1;
-                        setFailedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                        setLoadedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                      }}
+                      onClick={() => handleManualRetryPage(currentPage - 1)}
                       className="px-3 py-1.5 rounded-xl bg-primary/20 text-primary text-xs font-bold flex items-center gap-1.5"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
@@ -883,15 +1126,14 @@ export const ReaderPage: React.FC = () => {
                       onContextMenu={(e) => e.preventDefault()}
                       onDragStart={(e) => e.preventDefault()}
                     />
-                    <img
-                      src={pages[currentPage - 1]}
+                    <MangaPageImg
+                      pageIndex={currentPage - 1}
+                      originalUrl={pages[currentPage - 1]}
                       alt={`Page ${currentPage}`}
-                      onContextMenu={(e) => e.preventDefault()}
-                      onDragStart={(e) => e.preventDefault()}
-                      onLoad={() => handleImageLoad(currentPage - 1)}
-                      onError={() => {
-                        setFailedPages(prev => new Set(prev).add(currentPage - 1));
-                        handleImageLoad(currentPage - 1);
+                      onLoad={handleImageLoad}
+                      onError={(idx) => {
+                        setFailedPages(prev => new Set(prev).add(idx));
+                        handleImageLoad(idx);
                       }}
                       className={`${getImageStyle(true)} transition-opacity duration-300 ${
                         loadedPages.has(currentPage - 1) ? 'opacity-100' : 'opacity-0'
@@ -903,16 +1145,19 @@ export const ReaderPage: React.FC = () => {
             )}
             {pages[currentPage] && (
               <div className="relative flex-1 flex items-center justify-center min-h-[400px] select-none">
+                <TranslationOverlay
+                  isEnabled={isTranslationEnabled}
+                  loading={translations[currentPage]?.loading}
+                  bubbles={translations[currentPage]?.bubbles}
+                  error={translations[currentPage]?.error}
+                  onRetry={() => handleTranslatePage(currentPage)}
+                />
                 {failedPages.has(currentPage) ? (
                   <div className="w-full min-h-[300px] bg-[#161327] rounded-2xl border border-red-500/20 p-6 flex flex-col items-center justify-center gap-3 text-center">
                     <AlertCircle className="w-8 h-8 text-red-400" />
-                    <p className="text-xs text-white font-semibold">Page {currentPage + 1} Failed to Load</p>
+                    <p className="text-xs text-[#7c779b]">Page {currentPage + 1} Failed to Load</p>
                     <button
-                      onClick={() => {
-                        const pIdx = currentPage;
-                        setFailedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                        setLoadedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                      }}
+                      onClick={() => handleManualRetryPage(currentPage)}
                       className="px-3 py-1.5 rounded-xl bg-primary/20 text-primary text-xs font-bold flex items-center gap-1.5"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
@@ -932,15 +1177,14 @@ export const ReaderPage: React.FC = () => {
                       onContextMenu={(e) => e.preventDefault()}
                       onDragStart={(e) => e.preventDefault()}
                     />
-                    <img
-                      src={pages[currentPage]}
+                    <MangaPageImg
+                      pageIndex={currentPage}
+                      originalUrl={pages[currentPage]}
                       alt={`Page ${currentPage + 1}`}
-                      onContextMenu={(e) => e.preventDefault()}
-                      onDragStart={(e) => e.preventDefault()}
-                      onLoad={() => handleImageLoad(currentPage)}
-                      onError={() => {
-                        setFailedPages(prev => new Set(prev).add(currentPage));
-                        handleImageLoad(currentPage);
+                      onLoad={handleImageLoad}
+                      onError={(idx) => {
+                        setFailedPages(prev => new Set(prev).add(idx));
+                        handleImageLoad(idx);
                       }}
                       className={`${getImageStyle(true)} transition-opacity duration-300 ${
                         loadedPages.has(currentPage) ? 'opacity-100' : 'opacity-0'
@@ -960,6 +1204,13 @@ export const ReaderPage: React.FC = () => {
             }}>
             {pages.length > 0 && (
               <div className="relative w-full flex items-center justify-center min-h-[500px] select-none">
+                <TranslationOverlay
+                  isEnabled={isTranslationEnabled}
+                  loading={translations[currentPage - 1]?.loading}
+                  bubbles={translations[currentPage - 1]?.bubbles}
+                  error={translations[currentPage - 1]?.error}
+                  onRetry={() => handleTranslatePage(currentPage - 1)}
+                />
                 {failedPages.has(currentPage - 1) ? (
                   <div className="w-full max-w-lg min-h-[350px] bg-[#161327] rounded-2xl border border-red-500/20 p-8 flex flex-col items-center justify-center gap-3 my-auto text-center select-none">
                     <AlertCircle className="w-10 h-10 text-red-400" />
@@ -968,11 +1219,7 @@ export const ReaderPage: React.FC = () => {
                       <p className="text-xs text-[#7c779b] mt-1">The image could not be fetched from the source server</p>
                     </div>
                     <button
-                      onClick={() => {
-                        const pIdx = currentPage - 1;
-                        setFailedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                        setLoadedPages(prev => { const n = new Set(prev); n.delete(pIdx); return n; });
-                      }}
+                      onClick={() => handleManualRetryPage(currentPage - 1)}
                       className="px-4 py-2 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer mt-2"
                     >
                       <RefreshCw className="w-4 h-4" />
@@ -992,15 +1239,14 @@ export const ReaderPage: React.FC = () => {
                       onContextMenu={(e) => e.preventDefault()}
                       onDragStart={(e) => e.preventDefault()}
                     />
-                    <img
-                      src={pages[currentPage - 1]}
+                    <MangaPageImg
+                      pageIndex={currentPage - 1}
+                      originalUrl={pages[currentPage - 1]}
                       alt={`Page ${currentPage}`}
-                      onContextMenu={(e) => e.preventDefault()}
-                      onDragStart={(e) => e.preventDefault()}
-                      onLoad={() => handleImageLoad(currentPage - 1)}
-                      onError={() => {
-                        setFailedPages(prev => new Set(prev).add(currentPage - 1));
-                        handleImageLoad(currentPage - 1);
+                      onLoad={handleImageLoad}
+                      onError={(idx) => {
+                        setFailedPages(prev => new Set(prev).add(idx));
+                        handleImageLoad(idx);
                       }}
                       className={`${getImageStyle(false)} transition-opacity duration-300 ${
                         loadedPages.has(currentPage - 1) ? 'opacity-100' : 'opacity-0'
@@ -1013,49 +1259,50 @@ export const ReaderPage: React.FC = () => {
           </div>
         )}
 
-        {/* End of Chapter Navigation Card */}
-        <div className="w-full max-w-lg mx-auto my-10 px-4">
-          <div className="p-6 rounded-2xl glass-panel border border-white/10 text-center flex flex-col items-center gap-3 shadow-2xl">
-            <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center shadow-inner">
-              <Check className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="font-display text-base font-bold text-on-surface">End of Chapter</h3>
-              <p className="font-sans text-xs text-outline mt-0.5">
-                {chapterDetails?.name || `Chapter ${chapterId}`}
-              </p>
-            </div>
+        {/* End of Chapter Navigation Card (Shown in Webtoon mode or at end of Single/Spread mode) */}
+        {(settings.mode === 'webtoon' || (settings.mode === 'single' && currentPage === pages.length) || (settings.mode === 'double' && currentPage >= pages.length - 1)) && (
+          <div className="w-full max-w-lg mx-auto my-10 px-4 animate-fade-in">
+            <div className="p-6 rounded-2xl glass-panel border border-white/10 text-center flex flex-col items-center gap-3 shadow-2xl">
+              <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center shadow-inner">
+                <Check className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-display text-base font-bold text-on-surface">End of Chapter</h3>
+                <p className="font-sans text-xs text-outline mt-0.5">
+                  {chapterDetails?.name || `Chapter ${chapterId}`}
+                </p>
+              </div>
 
-            <div className="flex items-center justify-center gap-3 w-full mt-3">
-              {prevChapter && (
-                <button
-                  onClick={() => navigate(`/read/${prevChapter.id}`)}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-surface-container-high hover:bg-surface-bright border border-white/10 font-bold text-xs text-on-surface flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <ChevronLeft className="w-4 h-4 text-secondary" />
-                  <span className="truncate">Prev Chapter</span>
-                </button>
-              )}
-
-              {nextChapter ? (
-                <button
-                  onClick={() => navigate(`/read/${nextChapter.id}`)}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-primary/25 transition-all"
-                >
-                  <span className="truncate">Next Chapter</span>
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              ) : (
-                <button
-                  onClick={() => navigate(chapterDetails?.mangaId ? `/manga/${chapterDetails.mangaId}` : '/')}
-                  className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center justify-center gap-2"
-                >
-                  Back to Details
-                </button>
-              )}
+              <div className="flex items-center justify-center gap-3 w-full mt-3">
+                {prevChapter && (
+                  <button
+                    onClick={() => navigate(`/read/${prevChapter.id}`)}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-surface-container-high hover:bg-surface-bright border border-white/5 font-semibold text-xs text-on-surface flex items-center justify-center gap-1.5 transition-all"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                    <span className="truncate">Prev Chapter</span>
+                  </button>
+                )}
+                {nextChapter ? (
+                  <button
+                    onClick={() => navigate(`/read/${nextChapter.id}`)}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-primary/25 transition-all"
+                  >
+                    <span className="truncate">Next Chapter</span>
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => navigate(chapterDetails?.mangaId ? `/manga/${chapterDetails.mangaId}` : '/')}
+                    className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center justify-center gap-2"
+                  >
+                    Back to Details
+                  </button>
+                )}
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Floating Reader Scrubber Toolbar Dock (Primary Chapter & Page Controls) */}
@@ -1361,6 +1608,62 @@ export const ReaderPage: React.FC = () => {
               )}
             </div>
 
+            {/* Live AI Manga Translation Section */}
+            {isAiTranslationGloballyEnabled && (
+              <div className="space-y-2.5 pt-2 border-t border-white/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Languages className="w-4 h-4 text-[#9d86e9]" />
+                    <label className="text-xs font-bold text-outline uppercase tracking-wider">Live AI Translation</label>
+                  </div>
+                  <button
+                    onClick={toggleTranslation}
+                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
+                      isTranslationEnabled
+                        ? 'bg-[#9d86e9] text-[#0c0c14] border-[#9d86e9] shadow-md'
+                        : 'bg-surface-container-high text-outline hover:text-on-surface border-white/5'
+                    }`}
+                  >
+                    {isTranslationEnabled ? 'ON' : 'OFF'}
+                  </button>
+                </div>
+
+                {isTranslationEnabled && (
+                  <div className="p-3 rounded-xl bg-surface-container-high border border-white/5 space-y-2.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-outline">Target Language:</span>
+                      <span className="font-bold text-primary">{translationLang}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          if (settings.mode === 'single') handleTranslatePage(currentPage - 1, true);
+                          else if (settings.mode === 'double') {
+                            handleTranslatePage(currentPage - 1, true);
+                            if (currentPage < pages.length) handleTranslatePage(currentPage, true);
+                          } else if (settings.mode === 'webtoon') handleTranslatePage(currentPage - 1, true);
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Retranslate Page</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowSettingsDrawer(false);
+                          navigate('/settings?tab=ai');
+                        }}
+                        className="px-3 py-1.5 rounded-lg bg-surface-bright hover:bg-surface-bright/80 text-outline hover:text-on-surface text-xs font-semibold border border-white/5 transition-all cursor-pointer"
+                        title="Change language or API key"
+                      >
+                        Settings
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Shortcuts button */}
             <div className="pt-2">
               <button
@@ -1531,7 +1834,116 @@ export const ReaderPage: React.FC = () => {
   );
 };
 
+const TranslationOverlay: React.FC<{
+  bubbles?: TranslationBubble[];
+  loading?: boolean;
+  error?: string;
+  onRetry: () => void;
+  isEnabled: boolean;
+}> = ({ bubbles, loading, error, onRetry, isEnabled }) => {
+  const [activeBubbleIndex, setActiveBubbleIndex] = useState<number | null>(null);
+
+  if (!isEnabled) return null;
+
+  if (loading) {
+    return (
+      <div className="absolute inset-0 z-20 pointer-events-none flex items-center justify-center bg-black/25 backdrop-blur-[1px] rounded-xl transition-all">
+        <div className="px-3.5 py-2 rounded-2xl bg-[#161327]/90 border border-[#9d86e9]/40 text-[#9d86e9] text-xs font-bold flex items-center gap-2 shadow-2xl animate-pulse">
+          <Sparkles className="w-3.5 h-3.5 animate-spin" />
+          <span>Translating with Gemini AI...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="absolute top-2 right-2 z-20">
+        <button
+          onClick={(e) => { e.stopPropagation(); onRetry(); }}
+          className="px-2.5 py-1 rounded-xl bg-rose-500/80 hover:bg-rose-600 text-white text-[11px] font-bold flex items-center gap-1.5 shadow-lg backdrop-blur-md transition-all cursor-pointer"
+          title={error}
+        >
+          <AlertCircle className="w-3.5 h-3.5" />
+          <span>Retry Translation</span>
+        </button>
+      </div>
+    );
+  }
+
+  if (!bubbles || bubbles.length === 0) return null;
+
+  return (
+    <div className="absolute inset-0 z-20 pointer-events-auto overflow-visible">
+      {bubbles.map((b, i) => {
+        const rawYmin = b.box_2d[0] / 10;
+        const rawXmin = b.box_2d[1] / 10;
+        const rawYmax = b.box_2d[2] / 10;
+        const rawXmax = b.box_2d[3] / 10;
+
+        let origW = rawXmax > rawXmin ? rawXmax - rawXmin : 10;
+        let origH = rawYmax > rawYmin ? rawYmax - rawYmin : 5;
+
+        const textLen = b.translatedText ? b.translatedText.length : 0;
+
+        // Dynamic minimum width scaling based on text length to prevent short dialogues from ballooning and overlapping nearby bubbles
+        let targetMinW = 10;
+        if (textLen > 50) targetMinW = 17;
+        else if (textLen > 20) targetMinW = 13;
+        else targetMinW = 9;
+
+        let w = Math.max(origW, targetMinW);
+        let left = rawXmin;
+        if (origW < targetMinW) {
+          const diff = targetMinW - origW;
+          left = Math.max(0, rawXmin - diff / 2);
+        }
+        if (left + w > 100) {
+          left = Math.max(0, 100 - w);
+        }
+
+        const top = Math.max(0, Math.min(95, rawYmin));
+        const minH = Math.max(origH, 4);
+
+        let fontSize = 'clamp(10px, 1.15vw, 14px)';
+        if (textLen > 70) fontSize = 'clamp(8px, 0.8vw, 10.5px)';
+        else if (textLen > 35) fontSize = 'clamp(9px, 0.95vw, 12px)';
+
+        const isActive = activeBubbleIndex === i;
+
+        return (
+          <div
+            key={i}
+            onClick={(e) => {
+              e.stopPropagation();
+              setActiveBubbleIndex(isActive ? null : i);
+            }}
+            className={`absolute rounded-xl bg-white text-slate-950 border flex items-center justify-center p-1 sm:p-1.5 text-center font-sans font-bold leading-snug shadow-xl transition-all cursor-pointer ${
+              isActive 
+                ? 'z-50 ring-2 ring-[#9d86e9] shadow-2xl scale-105 border-[#9d86e9]' 
+                : 'z-20 border-slate-300 hover:z-40 hover:scale-102'
+            }`}
+            style={{
+              top: `${top}%`,
+              left: `${left}%`,
+              width: `${w}%`,
+              minHeight: `${minH}%`,
+              height: 'auto',
+              fontSize,
+              boxShadow: isActive ? '0 8px 28px rgba(157, 134, 233, 0.45)' : '0 4px 18px rgba(0, 0, 0, 0.45)'
+            }}
+            title={b.originalText ? `Original: ${b.originalText}` : undefined}
+          >
+            <span className="select-text w-full break-words leading-snug">{b.translatedText}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
 function getDemoPages(): string[] {
   return [];
 }
+
 

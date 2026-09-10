@@ -11,6 +11,9 @@ const USER_PROFILE_KEY = 'neoko_user_profile';
 const STATS_KEY = 'neoko_reading_stats';
 const COLLECTIONS_KEY = 'neoko_manga_collections';
 const NOTES_KEY = 'neoko_chapter_notes';
+const GEMINI_API_KEY = 'neoko_gemini_api_key';
+const TRANSLATION_LANG_KEY = 'neoko_translation_language';
+const AI_TRANSLATION_ENABLED_KEY = 'neoko_ai_translation_enabled';
 const API_CACHE_PREFIX = 'neoko_cache_';
 
 import { getAppCache, setAppCache, clearAppCache } from './cacheManager';
@@ -188,6 +191,24 @@ export function markChapterRead(chapterId: string | number) {
   const set = getReadChapters();
   set.add(String(chapterId));
   localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+}
+
+export function markChapterUnread(chapterId: string | number) {
+  const set = getReadChapters();
+  set.delete(String(chapterId));
+  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+}
+
+export function toggleChapterRead(chapterId: string | number): boolean {
+  const set = getReadChapters();
+  const idStr = String(chapterId);
+  if (set.has(idStr)) {
+    set.delete(idStr);
+  } else {
+    set.add(idStr);
+  }
+  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  return set.has(idStr);
 }
 
 export function isChapterRead(chapterId: string | number): boolean {
@@ -808,3 +829,53 @@ export function clearRecentSearches(): string[] {
   } catch {}
   return [];
 }
+
+// ──────────────── Gemini AI & Translation Settings ────────────────
+
+export function getGeminiApiKey(): string {
+  try {
+    return localStorage.getItem(GEMINI_API_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveGeminiApiKey(key: string): void {
+  try {
+    localStorage.setItem(GEMINI_API_KEY, key.trim());
+  } catch {}
+}
+
+export function getTranslationLanguage(): string {
+  try {
+    return localStorage.getItem(TRANSLATION_LANG_KEY) || 'English';
+  } catch {
+    return 'English';
+  }
+}
+
+export function saveTranslationLanguage(lang: string): void {
+  try {
+    localStorage.setItem(TRANSLATION_LANG_KEY, lang);
+  } catch {}
+}
+
+export function getAiTranslationEnabled(): boolean {
+  try {
+    const val = localStorage.getItem(AI_TRANSLATION_ENABLED_KEY);
+    return val !== null ? val === 'true' : true;
+  } catch {
+    return true;
+  }
+}
+
+export function saveAiTranslationEnabled(enabled: boolean): void {
+  try {
+    localStorage.setItem(AI_TRANSLATION_ENABLED_KEY, String(enabled));
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new Event('neoko_ai_translation_enabled_changed'));
+    }
+  } catch {}
+}
+
+

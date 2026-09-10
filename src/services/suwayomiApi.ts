@@ -1,5 +1,5 @@
-import { Manga, Chapter, Source, Extension, TrackerInfo, Category, DownloadStatus, ServerSettings, ServerInfo } from '../types/manga';
-export type { Manga, Chapter, Source, Extension, TrackerInfo, Category, DownloadStatus, ServerSettings, ServerInfo };
+import { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo } from '../types/manga';
+export type { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo };
 import { getCachedData, setCachedData, getContentFilterSettings, isSourceEnabled, getExtensionMode } from './storage';
 
 const GRAPHQL_ENDPOINT = '/api/graphql';
@@ -16,6 +16,34 @@ export function getImageUrl(relativePath?: string): string {
 
   if (relativePath.startsWith('http')) return relativePath;
   return relativePath.startsWith('/') ? relativePath : `/${relativePath}`;
+}
+
+export async function fetchAuthenticatedImageBlob(imageUrl: string): Promise<string | null> {
+  if (!imageUrl) return null;
+  try {
+    const headers: Record<string, string> = {};
+    const authUser = import.meta.env.VITE_SUWAYOMI_AUTH_USER || 'Prathxm';
+    const authPass = import.meta.env.VITE_SUWAYOMI_AUTH_PASS || 'REDACTED_PASSWORD';
+    if (authUser && authPass) {
+      headers['Authorization'] = `Basic ${btoa(`${authUser}:${authPass}`)}`;
+    }
+
+    const response = await fetch(imageUrl, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!response.ok) return null;
+
+    const blob = await response.blob();
+    if (blob && blob.size > 200) {
+      return URL.createObjectURL(blob);
+    }
+    return null;
+  } catch (e) {
+    console.error('Failed to fetch authenticated image blob for:', imageUrl, e);
+    return null;
+  }
 }
 
 export async function queryGraphQL(query: string, variables: Record<string, any> = {}) {
@@ -1410,6 +1438,122 @@ export async function logoutTracker(trackerId: number): Promise<boolean> {
     return true;
   } catch { return false; }
 }
+
+export async function getMangaTrackRecords(mangaId: number | string): Promise<TrackRecord[]> {
+  try {
+    const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
+    if (isNaN(numericId)) return [];
+    const res = await queryGraphQL(
+      'query ($id: Int!) { manga(id: $id) { trackRecords { nodes { id trackerId remoteId status score lastChapterRead totalChapters remoteUrl startDate finishDate } } } }',
+      { id: numericId }
+    );
+    return res?.data?.manga?.trackRecords?.nodes || [];
+  } catch { return []; }
+}
+
+export async function searchTracker(trackerId: number, query: string): Promise<TrackSearchResult[]> {
+  try {
+    const res = await queryGraphQL(
+      'query ($tId: Int!, $q: String!) { searchTracker(input: { trackerId: $tId, query: $q }) { trackSearches { id trackerId remoteId title coverUrl summary totalChapters status score lastChapterRead trackingUrl } } }',
+      { tId: trackerId, q: query }
+    );
+    return res?.data?.searchTracker?.trackSearches || [];
+  } catch { return []; }
+}
+
+export async function bindTrack(mangaId: number | string, trackerId: number, remoteId: string): Promise<TrackRecord | null> {
+  try {
+    const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
+    if (isNaN(numericId)) return null;
+    const res = await queryGraphQL(
+      'mutation ($mId: Int!, $tId: Int!, $rId: LongString!) { bindTrack(input: { mangaId: $mId, trackerId: $tId, remoteId: $rId }) { trackRecord { id trackerId remoteId status score lastChapterRead totalChapters remoteUrl } } }',
+      { mId: numericId, tId: trackerId, rId: String(remoteId) }
+    );
+    const rec = res?.data?.bindTrack?.trackRecord || null;
+    if (rec) {
+      // Auto trigger progress sync to tracker
+      await trackProgress(numericId);
+    }
+    return rec;
+  } catch { return null; }
+}
+
+export async function unbindTrack(recordId: number): Promise<boolean> {
+  try {
+    await queryGraphQL(
+      'mutation ($recId: Int!) { unbindTrack(input: { recordId: $recId }) { clientMutationId } }',
+      { recId: recordId }
+    );
+    return true;
+  } catch { return false; }
+}
+
+export async function updateTrack(recordId: number, status?: number, score?: number, lastChapterRead?: number): Promise<boolean> {
+  try {
+    const patch: any = { recordId };
+    if (status !== undefined) patch.status = status;
+    if (score !== undefined) patch.scoreString = String(score);
+    if (lastChapterRead !== undefined) patch.lastChapterRead = lastChapterRead;
+
+    await queryGraphQL(
+      'mutation ($recId: Int!, $st: Int, $sc: String, $ch: Float) { updateTrack(input: { recordId: $recId, status: $st, scoreString: $sc, lastChapterRead: $ch }) { trackRecord { id status score lastChapterRead } } }',
+      { recId: recordId, st: status, sc: score !== undefined ? String(score) : undefined, ch: lastChapterRead }
+    );
+    return true;
+  } catch { return false; }
+}
+
+export async function trackProgress(mangaId: number | string): Promise<boolean> {
+  try {
+    const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
+    if (isNaN(numericId)) return false;
+    await queryGraphQL(
+      'mutation ($mId: Int!) { trackProgress(input: { mangaId: $mId }) { clientMutationId } }',
+      { mId: numericId }
+    );
+    return true;
+  } catch { return false; }
+}
+
+export async function autoBindTrackers(mangaId: number | string, mangaTitle: string): Promise<TrackRecord[]> {
+  try {
+    const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
+    if (isNaN(numericId) || !mangaTitle) return [];
+
+    const [trackers, existingRecords] = await Promise.all([
+      getTrackers(),
+      getMangaTrackRecords(numericId),
+    ]);
+
+    const loggedInTrackers = trackers.filter(t => t.isLoggedIn);
+    if (loggedInTrackers.length === 0) return existingRecords;
+
+    const boundTrackerIds = new Set(existingRecords.map(r => r.trackerId));
+
+    for (const tracker of loggedInTrackers) {
+      if (!boundTrackerIds.has(tracker.id)) {
+        // Auto search for matching title
+        const searchResults = await searchTracker(tracker.id, mangaTitle);
+        if (searchResults && searchResults.length > 0) {
+          const cleanMangaTitle = mangaTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+          const exactMatch = searchResults.find(r => {
+            const cleanResultTitle = r.title.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return cleanResultTitle === cleanMangaTitle || cleanResultTitle.includes(cleanMangaTitle);
+          });
+          const targetResult = exactMatch || searchResults[0];
+          if (targetResult) {
+            await bindTrack(numericId, tracker.id, targetResult.remoteId);
+          }
+        }
+      }
+    }
+    return await getMangaTrackRecords(numericId);
+  } catch (e) {
+    console.error('Auto bind trackers error:', e);
+    return [];
+  }
+}
+
 
 // ──────────────── BACKUP & RESTORE (REAL API) ────────────────
 

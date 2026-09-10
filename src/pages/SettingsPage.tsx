@@ -7,9 +7,11 @@ import {
   getAppSettings, saveAppSettings, clearApiCache, clearHistory, getBookmarks,
   exportAllData, importAllData, clearAllData, getStorageUsage,
   getDisabledSourceIds, isSourceEnabled, toggleSourceEnabled,
-  getExtensionMode, setExtensionMode
+  getExtensionMode, setExtensionMode, getGeminiApiKey, saveGeminiApiKey,
+  getTranslationLanguage, saveTranslationLanguage, getAiTranslationEnabled, saveAiTranslationEnabled
 } from '../services/storage';
-import { getTrackers, loginTrackerCredentials, logoutTracker, getServerInfo, clearCachedImages, getCategories, createCategory, deleteCategory, getSources, isDedicatedNsfwName } from '../services/suwayomiApi';
+import { testGeminiApiKey } from '../services/translationService';
+import { getTrackers, loginTrackerCredentials, loginTrackerOAuth, logoutTracker, getServerInfo, clearCachedImages, getCategories, createCategory, deleteCategory, getSources, isDedicatedNsfwName } from '../services/suwayomiApi';
 import { getCacheUsageStats } from '../services/cacheManager';
 import { ReaderSettings, ContentFilterSettings, AppSettings, TrackerInfo, Category, ServerInfo, Source } from '../types/manga';
 import { AgeVerificationModal } from '../components/AgeVerificationModal';
@@ -18,16 +20,18 @@ import {
   Settings, BookOpen, Eye, Library, Download, Bell, Palette, Database, Info,
   ChevronRight, Check, ShieldCheck, Heart, Sparkles, Flame, Monitor, Moon, Sun,
   RotateCcw, Trash2, Upload, FileDown, ExternalLink, Github, MessageCircle,
-  RefreshCw, Plus, X, LogOut, AlertCircle, HardDrive, Radio, Send, Edit3
+  RefreshCw, Plus, X, LogOut, AlertCircle, HardDrive, Radio, Send, Edit3,
+  Languages, Key, EyeOff, CheckCircle2
 } from 'lucide-react';
 
 const AVATARS = ['🔮', '⚡', '🔥', '🌸', '🎭', '🐉', '🌙', '💎', '🎨', '🦊', '🌊', '⭐'];
 
-type SettingsTab = 'general' | 'reader' | 'content' | 'sources' | 'library' | 'tracking' | 'appearance' | 'data' | 'about';
+type SettingsTab = 'general' | 'reader' | 'ai' | 'content' | 'sources' | 'library' | 'tracking' | 'appearance' | 'data' | 'about';
 
 const TABS: { id: SettingsTab; label: string; icon: any }[] = [
   { id: 'general', label: 'General', icon: Settings },
   { id: 'reader', label: 'Reader', icon: BookOpen },
+  { id: 'ai', label: 'AI & Translation', icon: Languages },
   { id: 'content', label: 'Content & Filtering', icon: Eye },
   { id: 'sources', label: 'Sources & Providers', icon: Radio },
   { id: 'library', label: 'Library', icon: Library },
@@ -73,11 +77,101 @@ export const SettingsPage: React.FC = () => {
   const [disabledSourceIds, setDisabledSourceIds] = useState<string[]>(getDisabledSourceIds());
   const [loadingSources, setLoadingSources] = useState(false);
 
-  // Tracker credential modal state
+  // Tracker connection modal state
   const [selectedTrackerForLogin, setSelectedTrackerForLogin] = useState<TrackerInfo | null>(null);
+  const [trackerLoginMode, setTrackerLoginMode] = useState<'oauth' | 'credentials'>('oauth');
+  const [oAuthCallbackInput, setOAuthCallbackInput] = useState('');
   const [trackerUsername, setTrackerUsername] = useState('');
   const [trackerPassword, setTrackerPassword] = useState('');
   const [trackerLoginLoading, setTrackerLoginLoading] = useState(false);
+
+  const handleCompleteOAuthLogin = async () => {
+    if (!selectedTrackerForLogin || !oAuthCallbackInput.trim()) return;
+    setTrackerLoginLoading(true);
+    try {
+      let callbackString = oAuthCallbackInput.trim();
+      if (!callbackString.startsWith('http') && !callbackString.includes('code=')) {
+        callbackString = `http://localhost:4567/api/v1/tracker/login/${selectedTrackerForLogin.id}?code=${encodeURIComponent(callbackString)}`;
+      }
+      const success = await loginTrackerOAuth(selectedTrackerForLogin.id, callbackString);
+      if (success) {
+        showToast(`Successfully connected to ${selectedTrackerForLogin.name}!`, 'success');
+        setSelectedTrackerForLogin(null);
+        setOAuthCallbackInput('');
+        await loadTrackers();
+      } else {
+        showToast(`Failed to verify ${selectedTrackerForLogin.name} login. Check your URL/code and try again.`, 'error');
+      }
+    } catch (err: any) {
+      showToast(`OAuth Error: ${err?.message || 'Login failed'}`, 'error');
+    } finally {
+      setTrackerLoginLoading(false);
+    }
+  };
+
+  const handleCompleteCredentialLogin = async () => {
+    if (!selectedTrackerForLogin || !trackerUsername.trim() || !trackerPassword.trim()) return;
+    setTrackerLoginLoading(true);
+    try {
+      const success = await loginTrackerCredentials(selectedTrackerForLogin.id, trackerUsername, trackerPassword);
+      if (success) {
+        showToast(`Successfully logged in to ${selectedTrackerForLogin.name}!`, 'success');
+        setSelectedTrackerForLogin(null);
+        setTrackerUsername('');
+        setTrackerPassword('');
+        await loadTrackers();
+      } else {
+        showToast(`Login failed for ${selectedTrackerForLogin.name}. Please check username and password.`, 'error');
+      }
+    } catch (err: any) {
+      showToast(`Login Error: ${err?.message || 'Authentication failed'}`, 'error');
+    } finally {
+      setTrackerLoginLoading(false);
+    }
+  };
+
+  // Gemini AI & Translation state
+  const [aiTranslationEnabled, setAiTranslationEnabled] = useState(getAiTranslationEnabled());
+  const [geminiApiKey, setGeminiApiKey] = useState(getGeminiApiKey());
+  const [translationLang, setTranslationLang] = useState(getTranslationLanguage());
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isTestingKey, setIsTestingKey] = useState(false);
+  const [keyTestStatus, setKeyTestStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  const handleToggleAiTranslation = (enabled: boolean) => {
+    setAiTranslationEnabled(enabled);
+    saveAiTranslationEnabled(enabled);
+    triggerSaveNotice();
+  };
+
+  const handleSaveGeminiKey = (key: string) => {
+    setGeminiApiKey(key);
+    saveGeminiApiKey(key);
+    triggerSaveNotice();
+  };
+
+  const handleSaveTranslationLang = (lang: string) => {
+    setTranslationLang(lang);
+    saveTranslationLanguage(lang);
+    triggerSaveNotice();
+  };
+
+  const handleTestKey = async () => {
+    if (!geminiApiKey.trim()) {
+      showToast('Please enter an API Key first', 'error');
+      return;
+    }
+    setIsTestingKey(true);
+    setKeyTestStatus(null);
+    const result = await testGeminiApiKey(geminiApiKey);
+    setIsTestingKey(false);
+    setKeyTestStatus(result);
+    if (result.success) {
+      showToast('Gemini API Key verified successfully!', 'success');
+    } else {
+      showToast(`Key verification failed: ${result.message}`, 'error');
+    }
+  };
 
   useEffect(() => {
     loadTrackers();
@@ -85,6 +179,30 @@ export const SettingsPage: React.FC = () => {
     loadServerInfo();
     loadMangaSources();
   }, []);
+
+  // Auto-detect OAuth redirect code parameter in URL if redirected back directly
+  useEffect(() => {
+    const search = window.location.search;
+    if (search.includes('code=') && trackers.length > 0) {
+      const fullUrl = window.location.href;
+      const codeMatch = search.match(/code=([^&]+)/);
+      const trackerIdMatch = search.match(/trackerId=([^&]+)/);
+      if (codeMatch) {
+        const targetTracker = trackerIdMatch 
+          ? trackers.find(t => String(t.id) === trackerIdMatch[1])
+          : trackers.find(t => !t.isLoggedIn);
+        if (targetTracker) {
+          showToast(`Processing ${targetTracker.name} login...`, 'info');
+          loginTrackerOAuth(targetTracker.id, fullUrl).then(ok => {
+            if (ok) {
+              showToast(`Connected to ${targetTracker.name}!`, 'success');
+              loadTrackers();
+            }
+          });
+        }
+      }
+    }
+  }, [trackers]);
 
   const loadTrackers = async () => { setTrackers(await getTrackers()); };
   const loadCategories = async () => { setCategories(await getCategories()); };
@@ -274,8 +392,8 @@ export const SettingsPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Kagane Horizontal Category Pill Tabs */}
-      <nav className="flex items-center gap-2 overflow-x-auto no-scrollbar py-1">
+      {/* 2. Responsive Category Tabs (2-Column Grid on Mobile, Scrollable Pills on Desktop) */}
+      <nav className="grid grid-cols-2 sm:flex sm:items-center gap-2 sm:overflow-x-auto no-scrollbar py-1">
         {TABS.map(tab => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -283,14 +401,14 @@ export const SettingsPage: React.FC = () => {
             <button
               key={tab.id}
               onClick={() => changeTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-2 rounded-2xl text-xs font-bold transition-all shrink-0 ${
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-2 rounded-xl sm:rounded-2xl text-xs font-bold transition-all shrink-0 ${
                 isActive
-                  ? 'bg-[#9d86e9] text-[#0c0c14] shadow-md'
+                  ? 'bg-[#9d86e9] text-[#0c0c14] shadow-md shadow-[#9d86e9]/20'
                   : 'bg-[#161327] text-white hover:bg-[#231f3d] border border-[#2b2746]'
               }`}
             >
-              <Icon className="w-4 h-4" />
-              <span>{tab.label}</span>
+              <Icon className="w-4 h-4 shrink-0 text-current" />
+              <span className="truncate">{tab.label}</span>
             </button>
           );
         })}
@@ -453,6 +571,201 @@ export const SettingsPage: React.FC = () => {
                 <SettingRow label="Default Zoom" desc={`${readerSettings.zoomLevel}%`}>
                   <input type="range" min={50} max={200} step={5} value={readerSettings.zoomLevel} onChange={e => updateReader({ zoomLevel: Number(e.target.value) })} className="w-32" />
                 </SettingRow>
+              </div>
+            )}
+
+            {/* ──── AI & TRANSLATION ──── */}
+            {activeTab === 'ai' && (
+              <div className="space-y-6">
+                {/* Global AI Master Switch */}
+                <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#9d86e9]/30 flex items-center justify-between gap-4 shadow-lg">
+                  <div className="flex items-center gap-3.5">
+                    <div className="w-10 h-10 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center shrink-0">
+                      <Sparkles className="w-5 h-5" />
+                    </div>
+                    <div className="flex flex-col">
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>Enable AI Translation</span>
+                        {aiTranslationEnabled ? (
+                          <span className="px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 text-[10px] font-extrabold uppercase">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md bg-rose-500/20 text-rose-400 text-[10px] font-extrabold uppercase">
+                            Disabled
+                          </span>
+                        )}
+                      </h4>
+                      <p className="text-xs text-[#7c779b]">
+                        Master toggle to show or hide live AI manga page translation in the reader
+                      </p>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    active={aiTranslationEnabled}
+                    onToggle={() => handleToggleAiTranslation(!aiTranslationEnabled)}
+                  />
+                </div>
+
+                {!aiTranslationEnabled && (
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center gap-2.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
+                    <span>AI Translation is disabled globally. Enable the toggle above to use live manga translation inside the reader.</span>
+                  </div>
+                )}
+
+                <div className={!aiTranslationEnabled ? 'opacity-40 pointer-events-none transition-all space-y-6' : 'space-y-6 transition-all'}>
+                  <div>
+                    <SectionTitle title="Google Gemini Vision API Key" />
+                    <p className="text-xs text-[#7c779b] mt-1 mb-3">
+                      Neoko uses Google's Gemini Vision API for live manga text recognition and translation. Your API key is stored strictly on your device's local storage and sent directly to Google's API endpoint.
+                    </p>
+                    
+                    <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] space-y-4">
+                      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                        <div className="relative flex-1">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={geminiApiKey}
+                            onChange={(e) => setGeminiApiKey(e.target.value)}
+                            placeholder="AIzaSy..."
+                            className="w-full px-4 py-2.5 rounded-xl bg-[#161327] border border-[#2b2746] text-white text-sm focus:outline-none focus:border-[#9d86e9] pr-10 font-mono"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-[#7c779b] hover:text-white transition-colors"
+                          >
+                            {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleSaveGeminiKey(geminiApiKey)}
+                            className="px-4 py-2.5 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-bold text-xs hover:bg-[#b09cf5] transition-all shadow-md shrink-0"
+                          >
+                            Save Key
+                          </button>
+                          <button
+                            onClick={handleTestKey}
+                            disabled={isTestingKey || !geminiApiKey.trim()}
+                            className="px-4 py-2.5 rounded-xl bg-[#231f3d] text-white font-bold text-xs border border-[#2b2746] hover:bg-[#2b2746] disabled:opacity-50 transition-all flex items-center gap-2 shrink-0"
+                          >
+                            {isTestingKey ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5 text-[#9d86e9]" />}
+                            <span>Test API Key</span>
+                          </button>
+                        </div>
+                      </div>
+
+                      {keyTestStatus && (
+                        <div className={`p-3 rounded-xl text-xs flex items-center gap-2 border ${
+                          keyTestStatus.success 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300' 
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+                        }`}>
+                          {keyTestStatus.success ? <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" /> : <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />}
+                          <span>{keyTestStatus.message}</span>
+                        </div>
+                      )}
+
+                      <div className="text-[11px] text-[#7c779b] flex items-center justify-between pt-1">
+                        <span>Don't have an API key?</span>
+                        <a
+                          href="https://aistudio.google.com/app/apikey"
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#9d86e9] hover:underline flex items-center gap-1 font-semibold"
+                        >
+                          Get Free Gemini API Key <ExternalLink className="w-3 h-3" />
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <SectionTitle title="Target Translation Language" />
+                    <p className="text-xs text-[#7c779b] mt-1 mb-3">
+                      Select the target language to translate Japanese, Korean, or Chinese manga text into.
+                    </p>
+                    
+                    <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746]">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {[
+                          'English', 'Spanish', 'French', 'German',
+                          'Italian', 'Portuguese', 'Russian', 'Indonesian',
+                          'Vietnamese', 'Thai', 'Arabic', 'Hindi',
+                          'Turkish', 'Polish', 'Filipino', 'Chinese'
+                        ].map(lang => (
+                          <button
+                            key={lang}
+                            onClick={() => handleSaveTranslationLang(lang)}
+                            className={`px-3 py-2 rounded-xl text-xs font-bold transition-all border text-center ${
+                              translationLang === lang
+                                ? 'bg-[#9d86e9] text-[#0c0c14] border-[#9d86e9] shadow-md'
+                                : 'bg-[#161327] text-white border-[#2b2746] hover:bg-[#231f3d]'
+                            }`}
+                          >
+                            {lang}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <SectionTitle title="How to Use Live AI Translation" />
+                    <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] space-y-3.5 mt-3">
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                          1
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-bold text-white">Enable Translation in Reader</h4>
+                          <p className="text-[11px] text-[#7c779b]">
+                            Open any manga chapter and tap the <span className="text-[#9d86e9] font-bold">Languages icon (文A)</span> in the top header or Reader Settings drawer to activate Live AI Translation.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                          2
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-bold text-white">Tap Any Dialogue to Bring to Front</h4>
+                          <p className="text-[11px] text-[#7c779b]">
+                            If two speech bubbles overlap each other, simply <span className="text-white font-semibold">tap the dialogue bubble</span> you want to read. It will pop directly to the top layer (<code className="text-[#9d86e9] font-mono">z-50</code>) with a purple highlighted border.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                          3
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-bold text-white">Immersive Full-Screen Reading</h4>
+                          <p className="text-[11px] text-[#7c779b]">
+                            Tap anywhere on the reader screen to hide controls. The floating translation badge automatically hides along with reader controls so you get distraction-free reading.
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-start gap-3">
+                        <div className="w-7 h-7 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center font-bold text-xs shrink-0 mt-0.5">
+                          4
+                        </div>
+                        <div className="space-y-0.5">
+                          <h4 className="text-xs font-bold text-white">Retranslate & Original Text Tooltips</h4>
+                          <p className="text-[11px] text-[#7c779b]">
+                            Tap <span className="text-[#9d86e9] font-semibold">Retranslate</span> in the floating pill to bypass cache and refresh page translations. Hover or long-press any speech bubble to view original text.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -719,17 +1032,19 @@ export const SettingsPage: React.FC = () => {
                           >
                             <LogOut className="w-3.5 h-3.5" /> Logout
                           </button>
-                        ) : tracker.authUrl ? (
-                          <a
-                            href={tracker.authUrl}
-                            target="_blank"
-                            rel="noopener noreferrer"
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setSelectedTrackerForLogin(tracker);
+                              setTrackerLoginMode(tracker.authUrl ? 'oauth' : 'credentials');
+                              setOAuthCallbackInput('');
+                              setTrackerUsername('');
+                              setTrackerPassword('');
+                            }}
                             className="px-3.5 py-2 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-extrabold text-xs flex items-center gap-1.5 hover:bg-[#8b70e5] transition-colors shadow-sm"
                           >
                             <ExternalLink className="w-3.5 h-3.5" /> Connect
-                          </a>
-                        ) : (
-                          <span className="text-[11px] text-[#7c779b] italic">Not available</span>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -960,6 +1275,124 @@ export const SettingsPage: React.FC = () => {
             setShowAgeModal(false);
           }}
         />
+
+        {/* Tracker Login & OAuth Authorization Modal */}
+        {selectedTrackerForLogin && (
+          <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+            <div className="w-full max-w-md bg-[#161327] border border-[#2b2746] rounded-2xl p-6 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between pb-3 border-b border-[#2b2746]">
+                <div className="flex items-center gap-3">
+                  <img src={selectedTrackerForLogin.icon} alt={selectedTrackerForLogin.name} className="w-8 h-8 rounded-lg object-cover bg-[#231f3d]" />
+                  <h3 className="font-bold text-sm text-white">Connect {selectedTrackerForLogin.name}</h3>
+                </div>
+                <button
+                  onClick={() => setSelectedTrackerForLogin(null)}
+                  className="p-1 text-[#7c779b] hover:text-white rounded-lg hover:bg-white/10"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="flex items-center bg-[#1c1833] p-1 rounded-xl border border-[#2b2746]">
+                {selectedTrackerForLogin.authUrl && (
+                  <button
+                    onClick={() => setTrackerLoginMode('oauth')}
+                    className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      trackerLoginMode === 'oauth' ? 'bg-[#9d86e9] text-[#0c0c14]' : 'text-[#7c779b] hover:text-white'
+                    }`}
+                  >
+                    OAuth Browser Login
+                  </button>
+                )}
+                <button
+                  onClick={() => setTrackerLoginMode('credentials')}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    trackerLoginMode === 'credentials' ? 'bg-[#9d86e9] text-[#0c0c14]' : 'text-[#7c779b] hover:text-white'
+                  }`}
+                >
+                  Username & Password
+                </button>
+              </div>
+
+              {trackerLoginMode === 'oauth' && selectedTrackerForLogin.authUrl && (
+                <div className="space-y-4 pt-1">
+                  <div className="p-3 rounded-xl bg-[#1c1833] border border-[#2b2746] space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-white">Step 1: Authorize in Browser</span>
+                      <a
+                        href={selectedTrackerForLogin.authUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1.5 rounded-lg bg-[#9d86e9] text-[#0c0c14] font-extrabold text-[11px] hover:bg-[#8b70e5] flex items-center gap-1 shrink-0"
+                      >
+                        <span>Open {selectedTrackerForLogin.name}</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <p className="text-[11px] text-[#7c779b]">
+                      Log in to your account and approve access. If the browser redirects to a blank page or error (e.g. <code className="text-[#9d86e9] font-mono">localhost:4567</code>), copy the entire address bar URL.
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-[#9d86e9] uppercase tracking-wider">
+                      Step 2: Paste Redirected URL or Code
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={oAuthCallbackInput}
+                      onChange={(e) => setOAuthCallbackInput(e.target.value)}
+                      placeholder="Paste address bar URL (e.g. http://localhost:4567/api/v1/tracker/login/2?code=...) or authorization code"
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-[#1c1833] border border-[#2b2746] text-white text-xs focus:outline-none focus:border-[#9d86e9] font-mono"
+                    />
+                  </div>
+
+                  <button
+                    onClick={handleCompleteOAuthLogin}
+                    disabled={trackerLoginLoading || !oAuthCallbackInput.trim()}
+                    className="w-full py-3 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-extrabold text-xs hover:bg-[#8b70e5] disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#9d86e9]/20 cursor-pointer"
+                  >
+                    {trackerLoginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 stroke-[3]" />}
+                    <span>Verify & Complete Login</span>
+                  </button>
+                </div>
+              )}
+
+              {trackerLoginMode === 'credentials' && (
+                <div className="space-y-3 pt-1">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#7c779b]">Username / Email</label>
+                    <input
+                      type="text"
+                      value={trackerUsername}
+                      onChange={(e) => setTrackerUsername(e.target.value)}
+                      placeholder="Enter username"
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#1c1833] border border-[#2b2746] text-white text-xs focus:outline-none focus:border-[#9d86e9]"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-[#7c779b]">Password</label>
+                    <input
+                      type="password"
+                      value={trackerPassword}
+                      onChange={(e) => setTrackerPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full px-3.5 py-2 rounded-xl bg-[#1c1833] border border-[#2b2746] text-white text-xs focus:outline-none focus:border-[#9d86e9]"
+                    />
+                  </div>
+                  <button
+                    onClick={handleCompleteCredentialLogin}
+                    disabled={trackerLoginLoading || !trackerUsername.trim() || !trackerPassword.trim()}
+                    className="w-full py-3 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-extrabold text-xs hover:bg-[#8b70e5] disabled:opacity-50 transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#9d86e9]/20 cursor-pointer"
+                  >
+                    {trackerLoginLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4 stroke-[3]" />}
+                    <span>Login to {selectedTrackerForLogin.name}</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
   );
 };

@@ -160,6 +160,35 @@ export interface TrackerInfo {
   trackRecords: { totalCount: number };
 }
 
+export interface TrackRecord {
+  id: number;
+  trackerId: number;
+  remoteId: string;
+  title?: string;
+  status: number; // 1: Reading, 2: Completed, 3: On Hold, 4: Dropped, 6: Plan to Read
+  score: number;
+  lastChapterRead: number;
+  totalChapters: number;
+  remoteUrl?: string;
+  startDate?: string;
+  finishDate?: string;
+}
+
+export interface TrackSearchResult {
+  id: number;
+  trackerId: number;
+  remoteId: string;
+  title: string;
+  coverUrl?: string;
+  summary?: string;
+  totalChapters: number;
+  status: number;
+  score: number;
+  lastChapterRead: number;
+  trackingUrl?: string;
+}
+
+
 export interface Category {
   id: number;
   name: string;

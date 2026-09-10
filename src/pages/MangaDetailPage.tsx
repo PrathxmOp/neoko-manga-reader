@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Manga, Chapter, BookmarkItem } from '../types/manga';
-import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText } from '../services/suwayomiApi';
+import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText, autoBindTrackers } from '../services/suwayomiApi';
 import { fetchAniListRating, AniListMangaData } from '../services/anilistApi';
 import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters } from '../services/storage';
 import { useToast } from '../contexts/ToastContext';
@@ -9,8 +9,9 @@ import { ChapterItem } from '../components/ChapterItem';
 import { 
   ArrowLeft, Star, Play, BookmarkCheck, BookmarkPlus, 
   Search, ArrowUpDown, ChevronDown, ChevronUp, Loader2, RefreshCw, X, Check, FolderPlus, BookOpen, Clock, Heart,
-  Share2, Layers, Grid, ChevronRight
+  Share2, Layers, Grid, ChevronRight, Link
 } from 'lucide-react';
+import { TrackerModal } from '../components/TrackerModal';
 
 import { getComicType, getComicTypeColor } from '../utils/mangaType';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
@@ -26,7 +27,8 @@ export const MangaDetailPage: React.FC = () => {
   const [inLibrary, setInLibrary] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<BookmarkItem['category'] | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
-  useBodyScrollLock(showCategoryModal);
+  const [showTrackerModal, setShowTrackerModal] = useState(false);
+  useBodyScrollLock(showCategoryModal || showTrackerModal);
   const [expandDesc, setExpandDesc] = useState(false);
   const [aniListData, setAniListData] = useState<AniListMangaData | null>(null);
   const [chapterSearch, setChapterSearch] = useState('');
@@ -68,8 +70,9 @@ export const MangaDetailPage: React.FC = () => {
           setLastReadPage(found.pageIndex || 1);
         }
 
-        // Fetch real AniList rating asynchronously
+        // Fetch real AniList rating & auto-bind trackers asynchronously
         fetchAniListRating(data.title).then(res => setAniListData(res));
+        autoBindTrackers(data.id, data.title).catch(err => console.error('Auto bind error:', err));
       }
     } catch (e) {
       console.error(e);
@@ -389,33 +392,32 @@ export const MangaDetailPage: React.FC = () => {
 
                 <button
                   onClick={() => setShowCategoryModal(true)}
-                  className={`col-span-5 sm:col-span-4 py-3 px-4 rounded-xl flex items-center justify-center gap-2 font-display font-bold text-xs transition-all duration-300 transform hover:scale-[1.02] active:scale-95 border cursor-pointer ${
+                  className={`col-span-5 sm:col-span-3 py-3 px-3 rounded-xl flex items-center justify-center gap-1.5 font-display font-bold text-xs transition-all duration-300 transform hover:scale-[1.02] active:scale-95 border cursor-pointer ${
                     inLibrary
                       ? 'bg-gradient-to-r from-[#9d86e9] via-[#8b6ae9] to-[#7c5ce9] text-white border-[#bba7f5]/40 shadow-[0_0_24px_rgba(157,134,233,0.45)]'
                       : 'bg-[#1c1833]/90 hover:bg-[#252042] text-slate-200 border-[#2b2746] hover:border-[#9d86e9]/50 shadow-lg'
                   }`}
                 >
                   {inLibrary ? (
-                    <BookmarkCheck className="w-4.5 h-4.5 text-white shrink-0" />
+                    <BookmarkCheck className="w-4 h-4 text-white shrink-0" />
                   ) : (
-                    <BookmarkPlus className="w-4.5 h-4.5 text-[#9d86e9] shrink-0" />
+                    <BookmarkPlus className="w-4 h-4 text-[#9d86e9] shrink-0" />
                   )}
                   <span className="truncate">
                     {inLibrary ? (currentCategory ? `In: ${currentCategory}` : 'In Library') : 'Add to Library'}
                   </span>
-                  <ChevronDown className="w-3.5 h-3.5 opacity-80 shrink-0 ml-0.5" />
+                  <ChevronDown className="w-3 h-3 opacity-80 shrink-0" />
                 </button>
 
-                <div className="hidden sm:flex col-span-2 gap-2">
-                  <button 
-                    onClick={handleRefreshChapters}
-                    disabled={refreshing}
-                    className="flex-1 bg-[#231f3d] hover:bg-[#2b2746] text-white rounded-xl flex items-center justify-center transition-colors border border-[#2b2746] cursor-pointer"
-                    title="Fetch Latest Chapters from Source"
-                  >
-                    <RefreshCw className={`w-4 h-4 text-[#9d86e9] ${refreshing ? 'animate-spin' : ''}`} />
-                  </button>
-                </div>
+                {/* Trackers Button */}
+                <button
+                  onClick={() => setShowTrackerModal(true)}
+                  className="col-span-12 sm:col-span-3 py-3 px-3 rounded-xl bg-[#1c1833]/90 hover:bg-[#252042] text-slate-200 border border-[#2b2746] hover:border-[#9d86e9]/50 flex items-center justify-center gap-1.5 font-display font-bold text-xs cursor-pointer transition-all shadow-lg shrink-0"
+                  title="Trackers & Progress Sync"
+                >
+                  <Link className="w-4 h-4 text-[#9d86e9] shrink-0" />
+                  <span>Trackers</span>
+                </button>
               </div>
             </div>
           </div>
@@ -570,6 +572,11 @@ export const MangaDetailPage: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Tracker Sync Modal */}
+      {showTrackerModal && manga && (
+        <TrackerModal manga={manga} onClose={() => setShowTrackerModal(false)} />
       )}
     </main>
   );
