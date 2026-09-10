@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0..1,0" rel="stylesheet"/><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{width:100vw;margin:0;padding:0;background-color:#10131d;}body{overscroll-behavior:none;}.pb-safe{padding-bottom:env(safe-area-inset-bottom,0px);}.pt-safe{padding-top:env(safe-area-inset-top,0px);}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config = { darkMode: "class", theme: { extend: { "colors": { "on-secondary-container": "#ffbad3", "error-container": "#93000a", "surface-variant": "#32343f", "on-primary": "#3c0091", "on-primary-container": "#340080", "surface-container": "#1c1f2a", "surface": "#10131d", "tertiary-fixed-dim": "#ffb2b7", "surface-container-low": "#181b25", "surface-bright": "#363944", "surface-container-lowest": "#0b0e18", "on-primary-fixed": "#23005c", "on-tertiary-fixed-variant": "#92002a", "primary-container": "#a078ff", "tertiary-fixed": "#ffdadb", "on-background": "#e0e2f0", "secondary-container": "#aa0266", "tertiary": "#ffb2b7", "inverse-on-surface": "#2d303b", "on-error-container": "#ffdad6", "secondary": "#ffb0cd", "tertiary-container": "#ff516a", "on-secondary-fixed": "#3e0022", "on-secondary": "#640039", "secondary-fixed": "#ffd9e4", "surface-dim": "#10131d", "primary": "#d0bcff", "background": "#10131d", "primary-fixed-dim": "#d0bcff", "inverse-surface": "#e0e2f0", "inverse-primary": "#6d3bd7", "on-surface-variant": "#cbc3d7", "on-error": "#690005", "surface-container-high": "#272a34", "error": "#ffb4ab", "on-surface": "#e0e2f0", "outline": "#958ea0", "outline-variant": "#494454", "secondary-fixed-dim": "#ffb0cd", "on-secondary-fixed-variant": "#8c0053", "primary-fixed": "#e9ddff", "on-primary-fixed-variant": "#5516be", "on-tertiary": "#67001b", "on-tertiary-fixed": "#40000d", "on-tertiary-container": "#5b0017", "surface-tint": "#d0bcff", "surface-container-highest": "#32343f" }, "borderRadius": { "DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px" }, "spacing": { "space-xl": "1.5rem", "space-sm": "0.75rem", "space-2xs": "0.25rem", "gutter-mobile": "1rem", "space-md": "1rem", "space-xs": "0.5rem", "dock-inset-bottom": "1.5rem", "gutter-tablet": "1.5rem", "space-3xl": "3rem", "space-lg": "1.25rem", "space-2xl": "2rem" }, "fontFamily": { "label-sm": ["Inter"], "label-md": ["Inter"], "code-sm": ["Inter"], "display-lg": ["Plus Jakarta Sans"], "headline-lg": ["Plus Jakarta Sans"], "body-md": ["Inter"], "body-sm": ["Inter"], "display-lg-mobile": ["Plus Jakarta Sans"], "body-lg": ["Inter"], "headline-md": ["Plus Jakarta Sans"], "headline-sm": ["Plus Jakarta Sans"] }, "fontSize": { "label-sm": ["10px", { "lineHeight": "12px", "letterSpacing": "0.04em", "fontWeight": "700" }], "label-md": ["12px", { "lineHeight": "16px", "letterSpacing": "0.02em", "fontWeight": "600" }], "code-sm": ["11px", { "lineHeight": "14px", "letterSpacing": "0.02em", "fontWeight": "500" }], "display-lg": ["36px", { "lineHeight": "44px", "letterSpacing": "-0.03em", "fontWeight": "800" }], "headline-lg": ["24px", { "lineHeight": "32px", "letterSpacing": "-0.02em", "fontWeight": "700" }], "body-md": ["14px", { "lineHeight": "20px", "letterSpacing": "0em", "fontWeight": "400" }], "body-sm": ["12px", { "lineHeight": "16px", "letterSpacing": "0.01em", "fontWeight": "400" }], "display-lg-mobile": ["28px", { "lineHeight": "36px", "letterSpacing": "-0.025em", "fontWeight": "800" }], "body-lg": ["16px", { "lineHeight": "24px", "letterSpacing": "0em", "fontWeight": "400" }], "headline-md": ["20px", { "lineHeight": "28px", "letterSpacing": "-0.015em", "fontWeight": "600" }], "headline-sm": ["16px", { "lineHeight": "24px", "letterSpacing": "-0.01em", "fontWeight": "600" }] } } } };</script></head><body class="bg-surface font-body-md text-body-md text-on-surface flex flex-col min-h-screen"><header class="fixed top-0 w-full z-50 pt-safe bg-surface/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.25)]"><div class="h-16 px-gutter-mobile flex items-center justify-between gap-space-xs"><div class="flex items-center gap-space-xs"><img alt="NEOKO Manga Icon" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1W9MIXSDQ9BXMB2u9FR68sVrN4XUVx_YyGF0xH9Ck-4U9GApwI9tHhIZE7xb26TpsPKiC_Ugwzwl_BQUkAleHmn_oSI-m4Frwg7ExtmZo8LYmBR_SOWWtcifKcvGD0tUeSprz7mj2yuxDy5N7fWgj3nBGExJaurosvY3kcvUT6vikcPyqAHWXEkMEwh6IFMPKm0mDXw4lEX5EM0Y4PE8FEcOzA7GEF-rzOeKcr7H8zbOdqwE46znBhe2A"/><div class="flex flex-col"><span class="font-headline-md text-headline-md tracking-tight font-extrabold text-on-surface">NEOKO</span><span class="font-label-sm text-label-sm text-primary uppercase tracking-widest">Browse</span></div></div><div class="flex items-center gap-space-2xs"><button aria-label="Search" class="w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">search</span></button><button aria-label="Notifications" class="relative w-11 h-11 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface transition-colors"><span class="material-symbols-outlined text-[22px]">notifications</span><span class="absolute top-2.5 right-2.5 w-2 h-2 rounded-full bg-tertiary-container ring-2 ring-surface shadow-[0_0_8px_rgba(244,63,94,0.6)]"></span></button><div class="w-11 h-11 flex items-center justify-center"><img alt="Profile" class="w-8 h-8 rounded-full object-cover ring-1 ring-primary/40" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCkHW7DUL-bbitDNAFwkIri6wfHs923CCGWuS9mAMMPbkjIxdu655YIvF_mmCGtZpQyuWUaB4HX6EZ20KRzrkVHm83bPUrbB6dctcw6k8_FA96BD5X6eRFx8zpqZJduXVqznGZLHEGFNvnGbBYkPfW8ilZQxtE0II77uqEVXIpB2gprdH03YWYfh3zsa_xbhIiOZOedeIRWDoPBwl8Txd6qiD42FdJypfffOjPBdK3V7PZmWe2CsrU"/></div></div></div></header><main class="flex flex-col relative w-full pt-16 pb-space-3xl bg-surface min-h-screen"><div class="flex flex-col w-full">
+<!-- Search & Filter Controls Surface -->
+<section class="w-full px-gutter-mobile pt-space-xs pb-space-sm flex flex-col gap-space-sm">
+<!-- Search Bar Input Container -->
+<div class="relative w-full flex items-center bg-surface-container rounded-xl shadow-md transition-all duration-200 focus-within:shadow-[0_0_18px_rgba(160,120,255,0.2)]">
+<span class="material-symbols-outlined text-primary ml-space-md select-none text-[22px]">search</span>
+<input class="w-full h-11 bg-transparent px-space-xs text-on-surface font-body-md text-body-md placeholder:text-outline focus:outline-none" id="manga-search-input" placeholder="Titles, creators, tropes..." type="text" value="fantasy dungeon"/>
+<button aria-label="Clear search" class="w-9 h-9 flex items-center justify-center text-on-surface-variant hover:text-on-surface rounded-full transition-colors active:scale-95" id="clear-search-btn">
+<span class="material-symbols-outlined text-[18px]">close</span>
+</button>
+<button aria-label="Voice search" class="w-10 h-10 mr-1 flex items-center justify-center text-primary hover:text-primary-fixed rounded-full transition-colors active:scale-95">
+<span class="material-symbols-outlined text-[20px]">mic</span>
+</button>
+</div>
+<!-- Active Result Count & Toggle Drawer Row -->
+<div class="flex items-center justify-between px-space-2xs">
+<div class="flex items-center gap-space-xs">
+<span class="font-headline-sm text-headline-sm text-on-surface tracking-tight">142 Titles</span>
+<span class="font-label-sm text-label-sm text-primary uppercase tracking-wider px-space-xs py-0.5 rounded-full bg-surface-container-high">Live</span>
+</div>
+<button class="flex items-center gap-1.5 px-space-sm py-1.5 rounded-full bg-surface-container-high text-on-surface font-label-md text-label-md shadow-sm active:scale-95 transition-all" id="drawer-toggle-btn">
+<span class="material-symbols-outlined text-primary text-[18px]">tune</span>
+<span>Filters</span>
+<span class="w-4 h-4 rounded-full bg-primary text-on-primary flex items-center justify-center text-[10px] font-bold">2</span>
+<span class="material-symbols-outlined text-on-surface-variant text-[16px] transition-transform duration-200" id="drawer-chevron">expand_more</span>
+</button>
+</div>
+<!-- Filter & Facets Accordion Drawer -->
+<div class="flex flex-col gap-space-md p-space-md rounded-xl bg-surface-container-low shadow-lg transition-all duration-300" id="filter-drawer">
+<!-- Content Type Matrix -->
+<div class="flex flex-col gap-space-2xs">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Format</span>
+<div class="flex flex-wrap gap-space-xs" id="format-pills">
+<button class="px-space-sm py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-[0_0_12px_rgba(208,188,255,0.35)] transition-all">All</button>
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">Manga (JP)</button>
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">Manhwa (KR)</button>
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">Manhua (CN)</button>
+</div>
+</div>
+<!-- Publication Status -->
+<div class="flex flex-col gap-space-2xs">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Release Status</span>
+<div class="flex flex-wrap gap-space-xs">
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">All</button>
+<button class="px-space-sm py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-[0_0_12px_rgba(208,188,255,0.35)] transition-all">Ongoing</button>
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">Completed</button>
+<button class="px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface transition-all">Hiatus</button>
+</div>
+</div>
+<!-- Sort Criterion -->
+<div class="flex flex-col gap-space-2xs">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Sort Criterion</span>
+<div class="grid grid-cols-2 gap-space-xs">
+<button class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-surface-container-highest text-on-surface font-label-md text-label-md">
+<span>Most Popular</span>
+<span class="material-symbols-outlined text-primary text-[18px]">check</span>
+</button>
+<button class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<span>Highest Rated</span>
+</button>
+<button class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<span>Latest Updates</span>
+</button>
+<button class="flex items-center justify-between px-space-sm py-2 rounded-lg bg-surface-container text-on-surface-variant font-label-md text-label-md">
+<span>Alphabetical</span>
+</button>
+</div>
+</div>
+<!-- Genre Matrix -->
+<div class="flex flex-col gap-space-2xs">
+<div class="flex items-center justify-between">
+<span class="font-label-sm text-label-sm text-outline uppercase tracking-wider">Genre Match (OR/AND)</span>
+<span class="font-code-sm text-code-sm text-primary">2 Active</span>
+</div>
+<div class="flex flex-wrap gap-space-xs" id="genre-container">
+<button class="genre-tag px-space-sm py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-[0_0_12px_rgba(208,188,255,0.35)] flex items-center gap-1 active:scale-95 transition-all">
+<span>Action</span>
+<span class="material-symbols-outlined text-[14px]">check</span>
+</button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-primary text-on-primary font-label-md text-label-md shadow-[0_0_12px_rgba(208,188,255,0.35)] flex items-center gap-1 active:scale-95 transition-all">
+<span>Fantasy</span>
+<span class="material-symbols-outlined text-[14px]">check</span>
+</button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Adventure
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Romance
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Isekai
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Horror
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Comedy
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Sci-Fi
+          </button>
+<button class="genre-tag px-space-sm py-1 rounded-full bg-surface-container-high text-on-surface-variant font-label-md text-label-md hover:text-on-surface active:scale-95 transition-all">
+            Slice of Life
+          </button>
+</div>
+</div>
+<!-- Action Footer for Filters -->
+<div class="flex items-center justify-between pt-space-xs">
+<button class="flex items-center gap-1 font-label-md text-label-md text-tertiary hover:text-tertiary-fixed transition-colors active:scale-95" id="reset-all-filters-btn">
+<span class="material-symbols-outlined text-[16px]">restart_alt</span>
+<span>Reset all filters</span>
+</button>
+<button class="px-space-lg py-1.5 rounded-lg bg-primary-container text-on-primary-container font-headline-sm text-headline-sm shadow-md active:scale-95 transition-all" id="apply-filters-btn">
+          Apply Results
+        </button>
+</div>
+</div>
+</section>
+<!-- Query Context & Active Chips Scroll Strip -->
+<section class="w-full px-gutter-mobile py-space-xs flex items-center gap-space-xs overflow-x-auto no-scrollbar">
+<div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shrink-0">
+<span class="text-primary font-bold">Query:</span>
+<span>"fantasy dungeon"</span>
+<button class="hover:text-primary flex items-center ml-0.5"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+<div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shrink-0">
+<span class="text-outline">Genre:</span>
+<span>Action</span>
+<button class="hover:text-primary flex items-center ml-0.5"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+<div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shrink-0">
+<span class="text-outline">Genre:</span>
+<span>Fantasy</span>
+<button class="hover:text-primary flex items-center ml-0.5"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+<div class="flex items-center gap-1.5 px-space-sm py-1 rounded-full bg-surface-container text-on-surface font-label-sm text-label-sm shrink-0">
+<span class="text-outline">Status:</span>
+<span>Ongoing</span>
+<button class="hover:text-primary flex items-center ml-0.5"><span class="material-symbols-outlined text-[14px]">close</span></button>
+</div>
+</section>
+<!-- Results List / Stream -->
+<section class="w-full px-gutter-mobile flex flex-col gap-space-sm mt-space-xs">
+<!-- Manga Card 1: Omniscient Reader's Viewpoint -->
+<article class="relative flex gap-space-sm p-space-sm rounded-xl bg-surface-container-low shadow-sm transition-all hover:bg-surface-container">
+<div class="relative w-24 h-36 shrink-0 rounded-lg overflow-hidden bg-surface-container-highest shadow-md">
+<img class="w-full h-full object-cover" data-alt="Digital webtoon style manhwa cover illustration of a determined male reader in a black trench coat holding a glowing smartphone against a ruined apocalyptic fantasy city, dark atmospheric lighting with neon purple and electric blue magical particles, high detail manhwa aesthetic." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDjUCTKN16MX8mbWl6PXoOJiqJyfHKlNRi2IidWogWSTjv-aP6X8SRLhlOvI45SuTMAEiyEmozgaVyPZo47PZltNFTDr02R5t3tXabno7bS5eeHPu3n_V1W7CtynomYt_I2pD4-NX3PJSxFjxseDb2mBCIXhWUqnXoiHlKJdZ2dSr4FyiL1QHzofl_hJrzUwmFrIr59ITFZSf1ZXhJzAjsoInQvcV24gQapH8SyrfZrKwyeGIRkcUc"/>
+<div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur-sm flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-tertiary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">9.9</span>
+</div>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 72%;"></div>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">KR Manhwa</span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-tertiary">Weekly Sun</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+            Omniscient Reader's Viewpoint
+          </h2>
+<span class="font-body-sm text-body-sm text-outline truncate">
+            sing N song • Redice Studio
+          </span>
+<div class="flex flex-wrap gap-1 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Action</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Fantasy</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Dungeon</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">214 Ch.</span>
+<span class="text-outline">•</span>
+<span class="font-label-sm text-label-sm text-tertiary-fixed-dim font-medium">Ch. 214 read</span>
+</div>
+<button aria-label="Add bookmark" class="bookmark-btn flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-all active:scale-90">
+<span class="material-symbols-outlined text-[18px]">bookmark_add</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Manga Card 2: The Archmage's Restaurant -->
+<article class="relative flex gap-space-sm p-space-sm rounded-xl bg-surface-container-low shadow-sm transition-all hover:bg-surface-container">
+<div class="relative w-24 h-36 shrink-0 rounded-lg overflow-hidden bg-surface-container-highest shadow-md">
+<img class="w-full h-full object-cover" data-alt="Anime manga fantasy illustration of a silver-haired young wizard cooking with magical violet flames inside a cozy rustic tavern kitchen, roasted mythical dungeon meat and sparkling floating potion bottles, warm hearth light, intricate digital illustration." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAYvX-rkfmX487eNGub4cluVyiSkTEivKV4RIB5nLf7Y1mg4mmIJ0uNGrmiwVTfOjvxe-hP1Bp9C80eQsqHm1S4QUf07Q8z9tWnyxXmFw5Bfa9wdqIx7jX_BYT8MWF57dM7ZwaXVLuOmkbxCfjcMkWjiJgp_Al_HuwyBSZsbiPupyR6gVv4QWW8qHsmXcvaIY6kqebNRUIfHs-tXEloS_h9wLaBKlkufNzTliNRaca7xGPGaXc0VKs"/>
+<div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur-sm flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-tertiary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">9.8</span>
+</div>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 45%;"></div>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">KR Manhwa</span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-tertiary">Weekly Tue</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+            The Archmage's Restaurant
+          </h2>
+<span class="font-body-sm text-body-sm text-outline truncate">
+            Yラップ • Studio Khit
+          </span>
+<div class="flex flex-wrap gap-1 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Fantasy</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Cooking</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Slice of Life</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">88 Ch.</span>
+<span class="text-outline">•</span>
+<span class="font-label-sm text-label-sm text-outline">Updated 2h ago</span>
+</div>
+<button aria-label="Add bookmark" class="bookmark-btn flex items-center justify-center w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all active:scale-90">
+<span class="material-symbols-outlined text-[18px]">bookmark_add</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Manga Card 3: Tower of God -->
+<article class="relative flex gap-space-sm p-space-sm rounded-xl bg-surface-container-low shadow-sm transition-all hover:bg-surface-container">
+<div class="relative w-24 h-36 shrink-0 rounded-lg overflow-hidden bg-surface-container-highest shadow-md">
+<img class="w-full h-full object-cover" data-alt="Epic modern manhwa poster depicting a golden-eyed youth gazing up at a gigantic celestial floating tower with shinsu water streams floating in midair, rich navy and violet cosmic palette, surreal fantasy atmosphere, majestic wide angle." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCd6IrNbC5bmE_wSDvLSkjmpThS8B2sWG3Qcp5VpJ7VKNkNaasrv7GE5LjJSJZddszdF9-Frd94QuVv4DNEJgJS4KRv9dZ95Aq4QpCKd5SPNlwv_Mek-LPuXhIgmULSaEqUssMRf8Ln21i_3V5phOzFBf-XcLaODsgDeWhz4FUK8xED0E_43ll3p5GLwls2k3MtKcAUgz3Pz1mObFQKLczxzIg6r8KMmyS71YeehkLFdExzhDR50Xc"/>
+<div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur-sm flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-tertiary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">9.7</span>
+</div>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 90%;"></div>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">KR Webtoon</span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-tertiary">Weekly Mon</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+            Tower of God
+          </h2>
+<span class="font-body-sm text-body-sm text-outline truncate">
+            SIU
+          </span>
+<div class="flex flex-wrap gap-1 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Action</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Mystery</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Dungeon</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">612 Ch.</span>
+<span class="text-outline">•</span>
+<span class="font-label-sm text-label-sm text-outline">Updated yesterday</span>
+</div>
+<button aria-label="Add bookmark" class="bookmark-btn flex items-center justify-center w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all active:scale-90">
+<span class="material-symbols-outlined text-[18px]">bookmark_add</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Manga Card 4: Demon Slayer: Kimetsu no Yaiba -->
+<article class="relative flex gap-space-sm p-space-sm rounded-xl bg-surface-container-low shadow-sm transition-all hover:bg-surface-container">
+<div class="relative w-24 h-36 shrink-0 rounded-lg overflow-hidden bg-surface-container-highest shadow-md">
+<img class="w-full h-full object-cover" data-alt="Japanese traditional woodblock and dynamic modern manga style artwork of a swordsman in a checkered green and black haori unsheathing a black katana with swirling water dragons, vibrant crimson demon eyes glowing in dark night background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAq54fD8TMTPvyLFdEbNu95LY8PYRGaHL6U4Eduxs2qQWqrtw1IoJ86mdZz5PoFLaN8LAshRT2hMPNd9jWBGnbZAgwYfVhA5CGx2c210ScLwdKXGglQIWwayjzwJndJRbf5MhOA3FSJousMXQBmysCF1e7TeuZ3F3C7BV9ldDYKZ18BFpwCzBpbdnBYB0GanV18Gx0Ni0vi4v9KVi_uIDJqDfzWrFuvlJndI7IOf0duOuJBCb6MkOU"/>
+<div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur-sm flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-tertiary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">9.8</span>
+</div>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 100%;"></div>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">JP Manga</span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-outline">Completed</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+            Demon Slayer
+          </h2>
+<span class="font-body-sm text-body-sm text-outline truncate">
+            Koyoharu Gotouge • Shueisha
+          </span>
+<div class="flex flex-wrap gap-1 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Action</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Historical</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Supernatural</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">205 Ch.</span>
+<span class="text-outline">•</span>
+<span class="font-label-sm text-label-sm text-primary font-medium">Finished</span>
+</div>
+<button aria-label="Add bookmark" class="bookmark-btn flex items-center justify-center w-8 h-8 rounded-full bg-primary/10 text-primary hover:bg-primary hover:text-on-primary transition-all active:scale-90">
+<span class="material-symbols-outlined text-[18px]">bookmark_added</span>
+</button>
+</div>
+</div>
+</article>
+<!-- Manga Card 5: Wind Breaker -->
+<article class="relative flex gap-space-sm p-space-sm rounded-xl bg-surface-container-low shadow-sm transition-all hover:bg-surface-container">
+<div class="relative w-24 h-36 shrink-0 rounded-lg overflow-hidden bg-surface-container-highest shadow-md">
+<img class="w-full h-full object-cover" data-alt="Energetic street sports manhwa digital painting of a cool Korean cyclist teenager with neon goggles riding a customized fixie bike at high speed through a nocturnal Seoul district, vibrant speed lines and city neon reflection reflections." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDiKfAYwImp3H8VhovAlIPPni0k5rYUD22mKNzhQvDoobK1F56i27hgxg6TAB7K1Sxbv6TlkiIlrfBPwGAulOsGyifZS4BLpNHsEnXSI4n85kZsO7cVi8S4SlfZRd64jtoMJeFwCTI4yHcxw6z9NNcUp6tSA7sJhrRdqergBp5KugMIoNAIwMT331I6JXkje-gA0PEcKrs8tsbBis4fDnEwVnzlxQBtPYrw_RaCgXqcMNsbS1IhfzU"/>
+<div class="absolute top-1.5 right-1.5 px-1.5 py-0.5 rounded bg-surface-container-lowest/85 backdrop-blur-sm flex items-center gap-0.5">
+<span class="material-symbols-outlined text-[12px] text-tertiary" style="font-variation-settings: 'FILL' 1;">star</span>
+<span class="font-label-sm text-label-sm text-on-surface font-bold">9.6</span>
+</div>
+<div class="absolute bottom-0 inset-x-0 h-1 bg-surface-variant">
+<div class="h-full bg-primary" style="width: 25%;"></div>
+</div>
+</div>
+<div class="flex flex-col justify-between flex-1 min-w-0 py-0.5">
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center gap-1.5">
+<span class="font-label-sm text-label-sm text-primary uppercase font-bold tracking-wider">KR Manhwa</span>
+<span class="w-1 h-1 rounded-full bg-outline"></span>
+<span class="font-label-sm text-label-sm text-tertiary">Weekly Sun</span>
+</div>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold truncate leading-tight">
+            Wind Breaker
+          </h2>
+<span class="font-body-sm text-body-sm text-outline truncate">
+            Yongseok Jo • Naver
+          </span>
+<div class="flex flex-wrap gap-1 mt-1">
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Sports</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Drama</span>
+<span class="px-1.5 py-0.5 rounded bg-surface-container-highest text-on-surface-variant font-label-sm text-[10px]">Action</span>
+</div>
+</div>
+<div class="flex items-center justify-between pt-2">
+<div class="flex items-center gap-2">
+<span class="font-label-sm text-label-sm text-on-surface-variant">482 Ch.</span>
+<span class="text-outline">•</span>
+<span class="font-label-sm text-label-sm text-outline">Updated 3d ago</span>
+</div>
+<button aria-label="Add bookmark" class="bookmark-btn flex items-center justify-center w-8 h-8 rounded-full bg-surface-container-highest text-on-surface-variant hover:bg-primary hover:text-on-primary transition-all active:scale-90">
+<span class="material-symbols-outlined text-[18px]">bookmark_add</span>
+</button>
+</div>
+</div>
+</article>
+</section>
+<!-- Delightful End State / Quick Reset Card -->
+<section class="w-full px-gutter-mobile py-space-xl mt-space-sm flex flex-col items-center text-center">
+<div class="w-12 h-12 rounded-full bg-surface-container-high flex items-center justify-center text-primary mb-space-xs shadow-md">
+<span class="material-symbols-outlined text-[24px]">auto_stories</span>
+</div>
+<span class="font-headline-sm text-headline-sm text-on-surface font-semibold">Reached end of match</span>
+<p class="font-body-sm text-body-sm text-outline max-w-xs mt-1 mb-space-md">
+      Want to widen the dungeon crawl? Clear restrictions to see all 14,000+ series in NEOKO.
+    </p>
+<button class="px-space-lg py-2 rounded-full bg-surface-container text-primary hover:bg-surface-container-high font-label-md text-label-md flex items-center gap-2 shadow-sm active:scale-95 transition-all" id="bottom-reset-btn">
+<span class="material-symbols-outlined text-[18px]">filter_alt_off</span>
+<span>Reset all filters</span>
+</button>
+</section>
+</div>
+<script>
+  // Filter Drawer Collapse / Expand Micro-interaction
+  const drawerToggleBtn = document.getElementById('drawer-toggle-btn');
+  const filterDrawer = document.getElementById('filter-drawer');
+  const drawerChevron = document.getElementById('drawer-chevron');
+
+  let isDrawerOpen = true;
+  drawerToggleBtn.addEventListener('click', () => {
+    isDrawerOpen = !isDrawerOpen;
+    if (isDrawerOpen) {
+      filterDrawer.classList.remove('hidden');
+      drawerChevron.classList.remove('rotate-180');
+    } else {
+      filterDrawer.classList.add('hidden');
+      drawerChevron.classList.add('rotate-180');
+    }
+  });
+
+  // Search input clear interaction
+  const searchInput = document.getElementById('manga-search-input');
+  const clearBtn = document.getElementById('clear-search-btn');
+
+  clearBtn.addEventListener('click', () => {
+    searchInput.value = '';
+    searchInput.focus();
+  });
+
+  // Interactive Genre Matrix Tags Toggling
+  const genreButtons = document.querySelectorAll('.genre-tag');
+  genreButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isSelected = btn.classList.contains('bg-primary');
+      if (isSelected) {
+        btn.classList.remove('bg-primary', 'text-on-primary', 'shadow-[0_0_12px_rgba(208,188,255,0.35)]');
+        btn.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+        const checkIcon = btn.querySelector('.material-symbols-outlined');
+        if (checkIcon) checkIcon.remove();
+      } else {
+        btn.classList.add('bg-primary', 'text-on-primary', 'shadow-[0_0_12px_rgba(208,188,255,0.35)]');
+        btn.classList.remove('bg-surface-container-high', 'text-on-surface-variant');
+        const checkSpan = document.createElement('span');
+        checkSpan.className = 'material-symbols-outlined text-[14px]';
+        checkSpan.textContent = 'check';
+        btn.appendChild(checkSpan);
+      }
+    });
+  });
+
+  // Bookmark Toggle Micro-interaction
+  const bookmarkButtons = document.querySelectorAll('.bookmark-btn');
+  bookmarkButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const icon = btn.querySelector('.material-symbols-outlined');
+      if (icon.textContent === 'bookmark_add') {
+        icon.textContent = 'bookmark_added';
+        btn.classList.remove('bg-surface-container-highest', 'text-on-surface-variant');
+        btn.classList.add('bg-primary/15', 'text-primary');
+      } else {
+        icon.textContent = 'bookmark_add';
+        btn.classList.remove('bg-primary/15', 'text-primary');
+        btn.classList.add('bg-surface-container-highest', 'text-on-surface-variant');
+      }
+    });
+  });
+
+  // Reset Filters feedback
+  const resetHandler = () => {
+    searchInput.value = '';
+    genreButtons.forEach(btn => {
+      btn.classList.remove('bg-primary', 'text-on-primary', 'shadow-[0_0_12px_rgba(208,188,255,0.35)]');
+      btn.classList.add('bg-surface-container-high', 'text-on-surface-variant');
+      const checkIcon = btn.querySelector('.material-symbols-outlined');
+      if (checkIcon) checkIcon.remove();
+    });
+  };
+
+  document.getElementById('reset-all-filters-btn').addEventListener('click', resetHandler);
+  document.getElementById('bottom-reset-btn').addEventListener('click', resetHandler);
+</script></main><nav class="fixed bottom-0 w-full z-50 pb-safe pointer-events-none" data-active-classes="text-primary font-bold"><div class="px-gutter-mobile pb-space-sm pt-space-2xs"><div class="pointer-events-auto mx-auto max-w-md h-16 rounded-full bg-surface-container/85 backdrop-blur-2xl px-space-md flex items-center justify-around shadow-[0_4px_24px_rgba(0,0,0,0.45)]"><a class="group flex flex-col items-center justify-center w-14 h-12 text-on-surface-variant transition-all" data-path="discover" href="#"><span class="material-symbols-outlined text-[22px] transition-transform group-hover:scale-110">explore</span><span class="font-label-sm text-label-sm mt-0.5">Discover</span></a><a class="group relative flex flex-col items-center justify-center w-14 h-12 text-on-surface-variant transition-all" data-path="library" href="#"><div class="relative flex items-center justify-center"><span class="material-symbols-outlined text-[22px] transition-transform group-hover:scale-110">collections_bookmark</span><span class="absolute -top-1 -right-2 px-1 min-w-[14px] h-3.5 flex items-center justify-center rounded-full bg-tertiary-container text-on-tertiary font-label-sm text-[9px] shadow-[0_0_8px_rgba(255,81,106,0.6)]">4</span></div><span class="font-label-sm text-label-sm mt-0.5">Library</span></a><a aria-current="page" class="group flex flex-col items-center justify-center w-14 h-12 transition-all text-primary font-bold" data-path="browse" href="#"><span class="material-symbols-outlined text-[22px] transition-transform group-hover:scale-110">grid_view</span><span class="font-label-sm text-label-sm mt-0.5">Browse</span></a><a class="group flex flex-col items-center justify-center w-14 h-12 text-on-surface-variant transition-all" data-path="settings" href="#"><span class="material-symbols-outlined text-[22px] transition-transform group-hover:scale-110">settings</span><span class="font-label-sm text-label-sm mt-0.5">Settings</span></a></div></div></nav></body></html>

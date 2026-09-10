@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+
+# Suwayomi Server Binaries & Data
+Suwayomi-Server-*/
+*.tar.gz
+*.jar
+suwayomi-data/
+
+# Log files
+*.log
+tunnel.log
+suwayomi.log
+neoko.log
+
+# Local environment & IDE
+.env
+.env.local
+.vscode/
+.idea/
+.DS_Store

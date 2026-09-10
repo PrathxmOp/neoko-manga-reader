@@ -1,0 +1,24 @@
+services:
+  suwayomi:
+    image: ghcr.io/suwayomi/suwayomi-server:latest
+    container_name: suwayomi
+    ports:
+      - "127.0.0.1:4567:4567"
+    volumes:
+      - ./suwayomi-data:/home/suwayomi/.local/share/Tachidesk
+    environment:
+      - TZ=Asia/Kolkata
+      - SUWAYOMI_SERVER_BASIC_AUTH_ENABLED=true
+      - SUWAYOMI_SERVER_BASIC_AUTH_USERNAME=Prathxm
+      - SUWAYOMI_SERVER_BASIC_AUTH_PASSWORD=REDACTED_PASSWORD
+    restart: unless-stopped
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    ports:
+      - "127.0.0.1:8191:8191"
+    environment:
+      - LOG_LEVEL=info
+      - TZ=Asia/Kolkata
+    restart: unless-stopped

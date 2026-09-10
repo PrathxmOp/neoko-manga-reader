@@ -1,0 +1,369 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root, html[data-theme="dark"] {
+    --bg-main: #0c0c14;
+    --text-main: #e2e1ec;
+    --bg-surface: #161327;
+    --border-color: #2b2746;
+  }
+  html[data-theme="amoled"] {
+    --bg-main: #000000;
+    --text-main: #ffffff;
+    --bg-surface: #111111;
+    --border-color: #222222;
+  }
+  html[data-theme="midnight"] {
+    --bg-main: #070b19;
+    --text-main: #e0e7ff;
+    --bg-surface: #0f172a;
+    --border-color: #1e293b;
+  }
+  html[data-theme="light"] {
+    --bg-main: #f8fafc;
+    --text-main: #0f172a;
+    --bg-surface: #ffffff;
+    --border-color: #e2e8f0;
+  }
+
+  html, body {
+    width: 100vw;
+    margin: 0;
+    padding: 0;
+    background-color: var(--bg-main);
+    color: var(--text-main);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+  body {
+    overscroll-behavior-y: none;
+  }
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .pt-safe {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* ──────────────── Custom Scrollbars ──────────────── */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #0c0c14;
+}
+::-webkit-scrollbar-thumb {
+  background: #23203e;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #343058;
+}
+
+/* ──────────────── Glassmorphism Utilities ──────────────── */
+.glass-panel {
+  background: rgba(18, 21, 31, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-strong {
+  background: rgba(16, 19, 29, 0.92);
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+
+.glass-card {
+  background: rgba(28, 31, 42, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.glass-input {
+  background: rgba(39, 42, 52, 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ──────────────── Glow Effects ──────────────── */
+.glow-violet {
+  box-shadow: 0 0 16px rgba(160, 120, 255, 0.35);
+}
+
+.glow-crimson {
+  box-shadow: 0 0 12px rgba(244, 63, 94, 0.5);
+}
+
+.glow-primary {
+  box-shadow: 0 0 20px rgba(208, 188, 255, 0.3), 0 0 60px rgba(208, 188, 255, 0.1);
+}
+
+/* ──────────────── Gradient Text ──────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #d0bcff 0%, #a078ff 50%, #ffb0cd 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-text-warm {
+  background: linear-gradient(135deg, #ffb0cd 0%, #ff516a 50%, #ffb2b7 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ──────────────── Premium Animations ──────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-24px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(208, 188, 255, 0.3); }
+  50% { box-shadow: 0 0 24px rgba(208, 188, 255, 0.6); }
+}
+
+@keyframes spin-slow {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.animate-fade-in { animation: fadeIn 0.3s ease-out forwards; }
+.animate-fade-in-up { animation: fadeInUp 0.4s ease-out forwards; }
+.animate-fade-in-down { animation: fadeInDown 0.3s ease-out forwards; }
+.animate-slide-up { animation: slideUp 0.5s ease-out forwards; }
+.animate-slide-down { animation: slideDown 0.4s ease-out forwards; }
+.animate-scale-in { animation: scaleIn 0.3s ease-out forwards; }
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-glow-pulse { animation: glow-pulse 2s ease-in-out infinite; }
+.animate-slide-in-right { animation: slide-in-right 0.3s ease-out forwards; }
+
+/* Staggered children animation */
+.stagger-children > * {
+  opacity: 0;
+  animation: fadeInUp 0.4s ease-out forwards;
+}
+.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 450ms; }
+
+/* ──────────────── Premium Card Hover ──────────────── */
+.card-hover {
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(208, 188, 255, 0.15);
+}
+
+/* ──────────────── Premium Button ──────────────── */
+.btn-premium {
+  position: relative;
+  overflow: hidden;
+  transition: all 0.3s ease;
+}
+.btn-premium::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08), transparent);
+  transition: left 0.5s ease;
+}
+.btn-premium:hover::after {
+  left: 100%;
+}
+.btn-premium:active {
+  transform: scale(0.97);
+}
+
+/* ──────────────── Range Slider ──────────────── */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 999px;
+  background: #272a34;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d0bcff;
+  cursor: pointer;
+  box-shadow: 0 0 8px rgba(208, 188, 255, 0.5);
+  transition: all 0.2s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+  box-shadow: 0 0 16px rgba(208, 188, 255, 0.7);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #d0bcff;
+  cursor: pointer;
+  border: none;
+  box-shadow: 0 0 8px rgba(208, 188, 255, 0.5);
+}
+
+/* ──────────────── Toggle Switch ──────────────── */
+.toggle-switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+.toggle-switch .toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+}
+.toggle-switch.active .toggle-knob {
+  left: 23px;
+}
+
+/* ──────────────── Shimmer Loading ──────────────── */
+.shimmer {
+  background: linear-gradient(90deg, #1c1f2a 0%, #272a34 40%, #1c1f2a 80%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* ──────────────── Line Clamp ──────────────── */
+.line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* ──────────────── Cyber Neon Holographic Animated NEOKO Logo ──────────────── */
+@keyframes neokoCyberGlow {
+  0% {
+    filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.8)) drop-shadow(0 0 20px rgba(167, 139, 250, 0.4));
+    background-position: 0% 50%;
+  }
+  33% {
+    filter: drop-shadow(0 0 16px rgba(236, 72, 153, 0.9)) drop-shadow(0 0 30px rgba(236, 72, 153, 0.5));
+    background-position: 100% 50%;
+  }
+  66% {
+    filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.9)) drop-shadow(0 0 30px rgba(56, 189, 248, 0.5));
+    background-position: 200% 50%;
+  }
+  100% {
+    filter: drop-shadow(0 0 8px rgba(167, 139, 250, 0.8)) drop-shadow(0 0 20px rgba(167, 139, 250, 0.4));
+    background-position: 0% 50%;
+  }
+}
+
+.animate-neoko-shimmer {
+  background: linear-gradient(
+    120deg,
+    #a78bfa 0%,
+    #f472b6 20%,
+    #38bdf8 40%,
+    #c084fc 60%,
+    #f472b6 80%,
+    #a78bfa 100%
+  );
+  background-size: 300% 300%;
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: neokoCyberGlow 4s ease-in-out infinite;
+  transition: transform 0.3s ease;
+}
+
+.animate-neoko-shimmer:hover {
+  transform: scale(1.05);
+}
+
+@keyframes sunglassesFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg) scale(1);
+  }
+  50% {
+    transform: translateY(-3px) rotate(-5deg) scale(1.05);
+  }
+}
+
+.incognito-goggles-anim {
+  animation: sunglassesFloat 2.5s ease-in-out infinite;
+}
