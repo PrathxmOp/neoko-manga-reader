@@ -15,11 +15,12 @@ import { getTrackers, loginTrackerCredentials, loginTrackerOAuth, logoutTracker,
 import { getCacheUsageStats } from '../services/cacheManager';
 import { ReaderSettings, ContentFilterSettings, AppSettings, TrackerInfo, Category, ServerInfo, Source } from '../types/manga';
 import { AgeVerificationModal } from '../components/AgeVerificationModal';
+import { RazorpayDonateButton } from '../components/RazorpayDonateButton';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import {
   Settings, BookOpen, Eye, Library, Download, Bell, Palette, Database, Info,
   ChevronRight, Check, ShieldCheck, Heart, Sparkles, Flame, Monitor, Moon, Sun,
-  RotateCcw, Trash2, Upload, FileDown, ExternalLink, Github, MessageCircle,
+  RotateCcw, Trash2, Upload, FileDown, ExternalLink, Github, MessageCircle, MessageSquare,
   RefreshCw, Plus, X, LogOut, AlertCircle, HardDrive, Radio, Send, Edit3,
   Languages, Key, EyeOff, CheckCircle2
 } from 'lucide-react';
@@ -1235,29 +1236,18 @@ export const SettingsPage: React.FC = () => {
 
                 <SectionTitle title="Connect & Support" />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <a
-                    href="https://buymeachai.in/prathxm"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] hover:border-[#ec4899]/50 flex items-center gap-3 transition-all group"
-                  >
-                    <Heart className="w-5 h-5 text-[#ec4899] fill-current group-hover:scale-110 transition-transform" />
-                    <div className="flex flex-col text-left">
-                      <span className="font-bold text-xs text-white">Server & Domain Fund ($30 / ₹2,500)</span>
-                      <span className="text-[10px] text-[#7c779b]">Donate to buy custom domain & dedicated server</span>
-                    </div>
-                  </a>
+                  <RazorpayDonateButton />
 
                   <a
-                    href="https://telegram.me/NEOKO_OFFICIAL"
+                    href="https://discord.gg/bcw3dV6Jnt"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] hover:border-[#38bdf8]/50 flex items-center gap-3 transition-all group"
+                    className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] hover:border-[#5865f2]/50 flex items-center gap-3 transition-all group"
                   >
-                    <Send className="w-5 h-5 text-[#38bdf8] group-hover:scale-110 transition-transform" />
+                    <MessageSquare className="w-5 h-5 text-[#5865f2] group-hover:scale-110 transition-transform" />
                     <div className="flex flex-col text-left">
-                      <span className="font-bold text-xs text-white">Telegram Community & Feedback</span>
-                      <span className="text-[10px] text-[#7c779b]">Join @NEOKO_OFFICIAL for updates & feedback</span>
+                      <span className="font-bold text-xs text-white">Discord Community & Feedback</span>
+                      <span className="text-[10px] text-[#7c779b]">Join our Discord server for updates & feedback</span>
                     </div>
                   </a>
                 </div>

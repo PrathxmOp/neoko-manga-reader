@@ -8,7 +8,7 @@ import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaListItem } from '../components/MangaListItem';
 import { ContentLanguageModal } from '../components/ContentLanguageModal';
 import { MangaInfoModal } from '../components/MangaInfoModal';
-import { SlidersHorizontal, ChevronDown, RefreshCw, Compass, Loader2, Search, Play, Sparkles, BookOpen, Clock, X, Send } from 'lucide-react';
+import { SlidersHorizontal, ChevronDown, RefreshCw, Compass, Loader2, Search, Play, Sparkles, BookOpen, Clock, X, Send, MessageSquare } from 'lucide-react';
 
 const HOME_CACHE_KEY = 'home_catalog_v5';
 
@@ -331,30 +331,30 @@ export const DiscoverPage: React.FC = () => {
         )}
       </section>
 
-      {/* Telegram Feedback Thin Banner */}
+      {/* Discord Feedback Banner */}
       <a
-        href="https://telegram.me/NEOKO_OFFICIAL"
+        href="https://discord.gg/bcw3dV6Jnt"
         target="_blank"
         rel="noopener noreferrer"
-        className="group relative flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#0d233a]/90 via-[#182942]/80 to-[#161327]/90 border border-[#38bdf8]/30 hover:border-[#38bdf8]/60 shadow-lg backdrop-blur-md transition-all active:scale-[0.99]"
+        className="group relative flex items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-gradient-to-r from-[#1e1b4b]/90 via-[#2e1065]/80 to-[#161327]/90 border border-[#5865f2]/40 hover:border-[#5865f2]/80 shadow-lg backdrop-blur-md transition-all active:scale-[0.99]"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-1.5 rounded-xl bg-[#38bdf8]/20 text-[#38bdf8] shrink-0 group-hover:scale-110 transition-transform">
-            <Send className="w-4 h-4" />
+          <div className="p-1.5 rounded-xl bg-[#5865f2]/20 text-[#818cf8] shrink-0 group-hover:scale-110 transition-transform">
+            <MessageSquare className="w-4 h-4" />
           </div>
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-bold text-white truncate">
               Have feedback or feature requests?
             </span>
-            <span className="hidden sm:inline text-xs text-[#7dd3fc]">
-              Send feedback to developer on Telegram
+            <span className="hidden sm:inline text-xs text-[#a5b4fc]">
+              Join our Discord server for support & feedback
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 px-3 py-1 rounded-xl bg-[#38bdf8] hover:bg-[#0284c7] text-[#0c0c14] font-extrabold text-[11px] shrink-0 transition-colors shadow-md">
-          <span>Send Feedback</span>
-          <Send className="w-3 h-3" />
+        <div className="flex items-center gap-1 px-3 py-1 rounded-xl bg-[#5865f2] hover:bg-[#4752c4] text-white font-extrabold text-[11px] shrink-0 transition-colors shadow-md">
+          <span>Join Discord</span>
+          <MessageSquare className="w-3 h-3" />
         </div>
       </a>
 

@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Search, Heart, Menu, X, Settings, Compass, Grid, Clock, Bookmark, BarChart3, FolderHeart, Eye, EyeOff } from 'lucide-react';
 import { getIncognitoMode, toggleIncognitoMode } from '../services/storage';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { RazorpayDonateButton } from './RazorpayDonateButton';
 
 interface NavbarProps {
   activeSourceName?: string;
@@ -228,15 +229,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
               </p>
             </div>
 
-            <a
-              href="https://buymeachai.in/prathxm"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="w-full py-3 rounded-2xl bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] font-display font-extrabold text-sm flex items-center justify-center gap-2 shadow-lg transition-all active:scale-98"
-            >
-              <Heart className="w-4 h-4 fill-current" />
-              <span>Support & Keep Online</span>
-            </a>
+            <RazorpayDonateButton compact />
           </div>
         </div>
       )}
