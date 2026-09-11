@@ -21,6 +21,8 @@ neoko.log
 # Local environment & IDE
 .env
 .env.local
+.agents/
+.gemini/
 .vscode/
 .idea/
 .DS_Store
