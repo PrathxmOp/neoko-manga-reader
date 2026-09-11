@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { getReadingStats, resetReadingStats } from '../services/storage';
-import { ReadingStats } from '../types/manga';
-import { BarChart3, Flame, Clock, BookOpen, Sparkles, Trophy, Calendar, Award, RotateCcw } from 'lucide-react';
+import { getSiteStats } from '../services/suwayomiApi';
+import { ReadingStats, SiteStats } from '../types/manga';
+import { BarChart3, Flame, Clock, BookOpen, Sparkles, Trophy, Calendar, Award, RotateCcw, Database, Layers, Radio, Library, TrendingUp, Loader2, RefreshCw } from 'lucide-react';
 
 export const StatsPage: React.FC = () => {
   const [stats, setStats] = useState<ReadingStats>(getReadingStats());
+  const [siteStats, setSiteStats] = useState<SiteStats | null>(null);
+  const [siteStatsLoading, setSiteStatsLoading] = useState(true);
 
   useEffect(() => {
     const handleStatsChange = () => {
@@ -13,6 +16,22 @@ export const StatsPage: React.FC = () => {
     window.addEventListener('neoko_stats_changed', handleStatsChange);
     return () => window.removeEventListener('neoko_stats_changed', handleStatsChange);
   }, []);
+
+  useEffect(() => {
+    loadSiteStats();
+  }, []);
+
+  const loadSiteStats = async () => {
+    setSiteStatsLoading(true);
+    try {
+      const data = await getSiteStats();
+      setSiteStats(data);
+    } catch (e) {
+      console.error('Failed to load site stats:', e);
+    } finally {
+      setSiteStatsLoading(false);
+    }
+  };
 
   const handleResetStats = () => {
     if (confirm('Recalculate and reset reading statistics based on actual read chapters?')) {
@@ -41,6 +60,14 @@ export const StatsPage: React.FC = () => {
 
   const maxDailyCount = Math.max(1, ...last7Days.map(date => stats.historyByDate[date] || 0));
 
+  // Format large numbers with abbreviations
+  const formatCount = (n: number): string => {
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 10_000) return `${(n / 1_000).toFixed(1)}K`;
+    if (n >= 1_000) return n.toLocaleString();
+    return String(n);
+  };
+
   return (
     <main className="flex flex-col relative w-full pt-16 sm:pt-20 pb-24 px-3 sm:px-6 max-w-6xl mx-auto space-y-6 animate-fade-in">
       {/* Page Header */}
@@ -51,10 +78,10 @@ export const StatsPage: React.FC = () => {
           </div>
           <div>
             <h1 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight">
-              Reading Statistics
+              Statistics
             </h1>
             <p className="text-xs text-[#7c779b]">
-              Insights and analytics on your manga reading habits
+              Site catalog overview & personal reading analytics
             </p>
           </div>
         </div>
@@ -67,6 +94,100 @@ export const StatsPage: React.FC = () => {
           <RotateCcw className="w-3.5 h-3.5 text-[#9d86e9]" />
           <span className="hidden sm:inline">Recalculate</span>
         </button>
+      </div>
+
+      {/* ─── Site Overview Section ─── */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Database className="w-4 h-4 text-emerald-400" />
+            <h2 className="font-display font-bold text-base text-white">Site Overview</h2>
+          </div>
+          <button
+            onClick={loadSiteStats}
+            disabled={siteStatsLoading}
+            className="px-2.5 py-1 rounded-lg bg-[#1c1833] hover:bg-[#252042] text-slate-400 hover:text-white border border-[#2b2746] text-[11px] font-bold flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+            title="Refresh site stats"
+          >
+            <RefreshCw className={`w-3 h-3 ${siteStatsLoading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
+
+        {siteStatsLoading && !siteStats ? (
+          <div className="p-8 rounded-2xl bg-[#161327] border border-[#2b2746] flex items-center justify-center gap-3">
+            <Loader2 className="w-5 h-5 animate-spin text-[#9d86e9]" />
+            <span className="text-xs font-semibold text-[#7c779b]">Loading catalog stats from server...</span>
+          </div>
+        ) : siteStats ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {/* Total Manga */}
+            <div className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-2 relative overflow-hidden shadow-lg group hover:border-emerald-500/30 transition-colors">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-emerald-500/5 rounded-bl-[40px] transition-all group-hover:bg-emerald-500/10" />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[11px] text-[#7c779b] font-semibold uppercase tracking-wider">Total Titles</span>
+                <Layers className="w-4 h-4 text-emerald-400" />
+              </div>
+              <span className="text-2xl sm:text-3xl font-black text-white relative">{formatCount(siteStats.totalManga)}</span>
+              <span className="text-[10px] text-emerald-400 font-medium">Manga in database</span>
+            </div>
+
+            {/* Total Chapters */}
+            <div className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-2 relative overflow-hidden shadow-lg group hover:border-sky-500/30 transition-colors">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-sky-500/5 rounded-bl-[40px] transition-all group-hover:bg-sky-500/10" />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[11px] text-[#7c779b] font-semibold uppercase tracking-wider">Chapters</span>
+                <BookOpen className="w-4 h-4 text-sky-400" />
+              </div>
+              <span className="text-2xl sm:text-3xl font-black text-white relative">{formatCount(siteStats.totalChapters)}</span>
+              <span className="text-[10px] text-sky-400 font-medium">Total available</span>
+            </div>
+
+            {/* Active Sources */}
+            <div className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-2 relative overflow-hidden shadow-lg group hover:border-amber-500/30 transition-colors">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-amber-500/5 rounded-bl-[40px] transition-all group-hover:bg-amber-500/10" />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[11px] text-[#7c779b] font-semibold uppercase tracking-wider">Sources</span>
+                <Radio className="w-4 h-4 text-amber-400" />
+              </div>
+              <span className="text-2xl sm:text-3xl font-black text-white relative">{siteStats.activeSources}</span>
+              <span className="text-[10px] text-amber-400 font-medium">Active extensions</span>
+            </div>
+
+            {/* Library Size */}
+            <div className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-2 relative overflow-hidden shadow-lg group hover:border-[#9d86e9]/30 transition-colors">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-[#9d86e9]/5 rounded-bl-[40px] transition-all group-hover:bg-[#9d86e9]/10" />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[11px] text-[#7c779b] font-semibold uppercase tracking-wider">Library</span>
+                <Library className="w-4 h-4 text-[#9d86e9]" />
+              </div>
+              <span className="text-2xl sm:text-3xl font-black text-white relative">{formatCount(siteStats.librarySize)}</span>
+              <span className="text-[10px] text-[#9d86e9] font-medium">Saved titles</span>
+            </div>
+
+            {/* Recent Updates */}
+            <div className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-2 relative overflow-hidden shadow-lg group hover:border-rose-500/30 transition-colors col-span-2 sm:col-span-1">
+              <div className="absolute top-0 right-0 w-20 h-20 bg-rose-500/5 rounded-bl-[40px] transition-all group-hover:bg-rose-500/10" />
+              <div className="flex items-center justify-between relative">
+                <span className="text-[11px] text-[#7c779b] font-semibold uppercase tracking-wider">Updates (7d)</span>
+                <TrendingUp className="w-4 h-4 text-rose-400" />
+              </div>
+              <span className="text-2xl sm:text-3xl font-black text-white relative">{siteStats.recentChapters7d > 0 ? `+${formatCount(siteStats.recentChapters7d)}` : '0'}</span>
+              <span className="text-[10px] text-rose-400 font-medium">New chapters this week</span>
+            </div>
+          </div>
+        ) : (
+          <div className="p-6 rounded-2xl bg-[#161327] border border-[#2b2746] text-center">
+            <p className="text-xs text-[#7c779b]">Could not load site stats. Make sure the Suwayomi server is running.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Divider between Site and Personal */}
+      <div className="flex items-center gap-3 pt-2">
+        <div className="flex-1 h-px bg-[#2b2746]" />
+        <span className="text-[11px] font-bold text-[#7c779b] uppercase tracking-widest shrink-0">Your Reading Stats</span>
+        <div className="flex-1 h-px bg-[#2b2746]" />
       </div>
 
       {/* Top 4 KPI Metrics */}

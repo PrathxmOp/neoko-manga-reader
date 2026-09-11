@@ -90,7 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
             <button
               onClick={() => navigate('/settings')}
               aria-label="Settings"
-              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-[#a5a3c2] hover:text-white hover:bg-[#1c1833] transition-colors"
+              className="hidden sm:flex w-8 h-8 sm:w-9 sm:h-9 items-center justify-center rounded-full text-[#a5a3c2] hover:text-white hover:bg-[#1c1833] transition-colors"
               title="Settings"
             >
               <Settings className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -219,13 +219,13 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
             </div>
 
             <p className="text-xs text-[#9e9ab8] leading-relaxed">
-              <strong>Demo Notice:</strong> This is currently a demo test build. I am raising funds to buy a high-speed dedicated server and custom domain for NEOKO.
+              <strong>Server Upgrade Fund:</strong> Currently, NEOKO is hosted locally on my personal laptop, which is why it may feel a bit slow at times. I am raising funds to move it to a 24/7 high-speed dedicated cloud server!
             </p>
 
             <div className="p-3.5 rounded-2xl bg-[#1c1833] border border-[#ec4899]/40 text-xs text-slate-200 leading-relaxed space-y-1">
-              <p className="font-semibold text-[#ec4899]">⚠️ Vital Notice:</p>
+              <p className="font-semibold text-[#ec4899]">⚡ Why Donate?</p>
               <p className="text-[11px] text-slate-300">
-                If the monthly goal of <strong>$30 (~₹2,500)</strong> is not met, server hosting costs cannot be sustained and the website will have to be closed. Every contribution directly keeps NEOKO online!
+                Your donations will directly fund a <strong>dedicated cloud server ($30 / ~₹2,500)</strong> so NEOKO can run 24/7 with zero lag, instant page loads, and no laptop dependency!
               </p>
             </div>
 

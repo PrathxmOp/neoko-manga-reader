@@ -1,6 +1,7 @@
-import { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo } from '../types/manga';
-export type { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo };
-import { getCachedData, setCachedData, getContentFilterSettings, isSourceEnabled, getExtensionMode } from './storage';
+import { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo, SiteStats } from '../types/manga';
+export type { Manga, Chapter, Source, Extension, TrackerInfo, TrackRecord, TrackSearchResult, Category, DownloadStatus, ServerSettings, ServerInfo, SiteStats };
+import { getCachedData, setCachedData, getContentFilterSettings, isSourceEnabled, getExtensionMode, getEnabledSourceIds } from './storage';
+import { isDefault18Plus } from '../config/extensionRules';
 
 const GRAPHQL_ENDPOINT = '/api/graphql';
 
@@ -173,7 +174,9 @@ export function isBrokenSource(name: string): boolean {
     lower.includes('readcomiconline') ||
     lower.includes('obsolete') ||
     lower.includes('deprecated') ||
-    lower.includes('allporncomics')
+    lower.includes('allporncomics') ||
+    lower.includes('local source') ||
+    lower.includes('local storage')
   );
 }
 
@@ -195,7 +198,7 @@ export function isRecommendedSource(name: string): boolean {
 }
 
 export async function getSources(forceRefresh: boolean = false, ignoreRatingFilter: boolean = false): Promise<Source[]> {
-  const cacheKey = `sources_list_raw_v2`;
+  const cacheKey = `sources_list_raw_v3`;
   const cached = getCachedData<Source[]>(cacheKey);
 
   if (cached && cached.length > 0) {
@@ -259,61 +262,7 @@ export async function getSources(forceRefresh: boolean = false, ignoreRatingFilt
 
 export function isDedicatedNsfwName(name: string): boolean {
   if (!name) return false;
-  const nameLower = name.toLowerCase().trim();
-
-  // General sources whitelist — these are general manga/manhwa sites and should NEVER be marked 18+ adult sources
-  if (
-    nameLower.includes('mangadex') ||
-    nameLower.includes('bato') ||
-    nameLower.includes('mangareader') ||
-    nameLower.includes('mangafire') ||
-    nameLower.includes('comick') ||
-    nameLower.includes('weeb central') ||
-    nameLower.includes('pocket comics') ||
-    nameLower.includes('asura') ||
-    nameLower.includes('flame') ||
-    nameLower.includes('manga plus') ||
-    nameLower.includes('manga demon') ||
-    nameLower.includes('read comic') ||
-    nameLower.includes('mangasee') ||
-    nameLower.includes('mangalife') ||
-    nameLower.includes('mangapark') ||
-    nameLower.includes('mangakakalot') ||
-    nameLower.includes('manganato') ||
-    nameLower.includes('tapas') ||
-    nameLower.includes('webtoons') ||
-    nameLower.includes('rawdevart') ||
-    nameLower.includes('mangaraw') ||
-    nameLower.includes('klmanga') ||
-    nameLower.includes('mangaowl')
-  ) {
-    return false;
-  }
-
-  // Explicit Dedicated Adult / Hentai site names & keywords
-  return (
-    nameLower.includes('hentai') ||
-    nameLower.includes('nhentai') ||
-    nameLower.includes('3hentai') ||
-    nameLower.includes('e-hentai') ||
-    nameLower.includes('exhentai') ||
-    nameLower.includes('porno') ||
-    nameLower.includes('porn') ||
-    nameLower.includes('allporncomics') ||
-    nameLower.includes('pururin') ||
-    nameLower.includes('multporn') ||
-    nameLower.includes('hitomi') ||
-    nameLower.includes('luscious') ||
-    nameLower.includes('8muses') ||
-    nameLower.includes('hbrowse') ||
-    nameLower.includes('tsumino') ||
-    nameLower.includes('manhwa18') ||
-    nameLower.includes('toonily18') ||
-    nameLower.includes('manga18') ||
-    nameLower.includes('webtoonxyz') ||
-    nameLower.includes('18comic') ||
-    nameLower.includes('erotica')
-  );
+  return isDefault18Plus(name);
 }
 
 export function isNsfwSource(source: Source): boolean {
@@ -501,7 +450,8 @@ export async function searchMultiSource(
   sourceIds: string[] = [],
   queryText: string = '',
   page: number = 1,
-  forceRefresh: boolean = false
+  forceRefresh: boolean = false,
+  type: 'SEARCH' | 'POPULAR' | 'LATEST' = 'POPULAR'
 ): Promise<{ mangas: Manga[]; sourceResultsCount: Record<string, number>; sourceErrors: Record<string, string> }> {
   if (Object.keys(sourceLookupMap).length === 0) {
     try {
@@ -555,10 +505,12 @@ export async function searchMultiSource(
     return aRec - bRec;
   });
 
-  // Cap max concurrent sources queried at once to max 6 to keep requests ultra fast & responsive
-  const targetSourceIds = validSourceIds.slice(0, 6);
+  // Cap max concurrent sources queried at once (query up to 25 sources for title search or all explicitly passed sourceIds)
+  const maxLimit = sourceIds && sourceIds.length > 0 ? sourceIds.length : (queryText.trim() ? 25 : 12);
+  const targetSourceIds = validSourceIds.slice(0, maxLimit);
+  const fetchType = queryText.trim() ? 'SEARCH' : type;
 
-  const cacheKey = `search_${queryText.trim().toLowerCase()}_p${page}_src_${targetSourceIds.join('_')}`;
+  const cacheKey = `search_${queryText.trim().toLowerCase()}_p${page}_type_${fetchType}_src_${targetSourceIds.join('_')}`;
   if (!forceRefresh) {
     const cached = getCachedData<{ mangas: Manga[]; sourceResultsCount: Record<string, number>; sourceErrors: Record<string, string> }>(cacheKey);
     if (cached && cached.mangas && cached.mangas.length > 0) return cached;
@@ -567,7 +519,7 @@ export async function searchMultiSource(
   // Cap each source request to max 3000ms timeout so slow/hanging sources don't block the UI
   const fetchWithTimeout = (sId: string) =>
     Promise.race([
-      fetchSourceManga(sId, queryText, page, queryText ? 'SEARCH' : 'POPULAR', forceRefresh),
+      fetchSourceManga(sId, queryText, page, fetchType, forceRefresh),
       new Promise<{ mangas: Manga[]; hasNextPage: boolean; error?: string }>((resolve) =>
         setTimeout(() => resolve({ mangas: [], hasNextPage: false, error: 'Source Timeout' }), 3000)
       ),
@@ -632,10 +584,155 @@ export async function searchMultiSource(
     sourceResultsCount,
     sourceErrors,
   };
-  if (queryText.trim() !== '' && deduplicated && deduplicated.length > 0) {
-    setCachedData(cacheKey, output);
+  if (deduplicated && deduplicated.length > 0) {
+    setCachedData(cacheKey, output, 15);
   }
   return output;
+}
+
+// ────────────── LATEST MANGA UPDATES ──────────────
+
+export async function getLatestUpdates(limit: number = 20, forceRefresh: boolean = false): Promise<Manga[]> {
+  const cacheKey = `latest_updates_${limit}`;
+  if (!forceRefresh) {
+    const cached = getCachedData<Manga[]>(cacheKey);
+    if (cached && cached.length > 0) return cached;
+  }
+
+  try {
+    // 1. Query recently uploaded chapters from Suwayomi GraphQL backend
+    const query = `{
+      chapters(orderBy: UPLOAD_DATE, orderByFilter: DESC, first: 40) {
+        nodes {
+          manga {
+            id
+            title
+            thumbnailUrl
+            inLibrary
+            source { id name }
+          }
+        }
+      }
+    }`;
+    const res = await queryGraphQL(query);
+    const nodes = res?.data?.chapters?.nodes || [];
+    const uniqueMangas: Manga[] = [];
+    const seenIds = new Set<string>();
+
+    for (const node of nodes) {
+      const m = node?.manga;
+      if (m && m.id && !seenIds.has(String(m.id))) {
+        seenIds.add(String(m.id));
+        uniqueMangas.push({
+          id: String(m.id),
+          title: m.title || 'Untitled',
+          thumbnailUrl: getImageUrl(m.thumbnailUrl || ''),
+          sourceId: m.source?.id ? String(m.source.id) : '',
+          sourceName: m.source?.name ? String(m.source.name) : '',
+          inLibrary: !!m.inLibrary,
+        });
+      }
+      if (uniqueMangas.length >= limit) break;
+    }
+
+    if (uniqueMangas.length > 0) {
+      setCachedData(cacheKey, uniqueMangas, 10);
+      return filterMangaByContentRating(uniqueMangas);
+    }
+  } catch (e) {
+    console.warn('GraphQL latest chapters query failed, falling back to LATEST source fetch:', e);
+  }
+
+  // 2. Fallback: Query active sources directly with fetch type 'LATEST'
+  try {
+    const activeIds = getEnabledSourceIds();
+    const res = await searchMultiSource(activeIds, '', 1, forceRefresh, 'LATEST');
+    if (res.mangas && res.mangas.length > 0) {
+      const result = res.mangas.slice(0, limit);
+      setCachedData(cacheKey, result, 10);
+      return result;
+    }
+  } catch (e) {
+    console.error('Failed to fetch latest source manga:', e);
+  }
+
+  return [];
+}
+
+// Helper to resolve an AniList title to a real Suwayomi source manga with chapters
+export async function resolveMangaFromSourceByTitle(
+  title: string,
+  alternateTitles: string[] = [],
+  onProgress?: (statusMsg: string) => void
+): Promise<Manga | null> {
+  if (!title) return null;
+
+  const cleanMain = title.replace(/[\(\[\{\\\/].*?[\)\]\}]/g, '').trim();
+  const cacheKey = `resolved_title_${cleanMain.toLowerCase()}`;
+
+  onProgress?.('Checking cached source resolutions...');
+  const cached = getCachedData<Manga>(cacheKey);
+  if (cached && cached.chapters && cached.chapters.length > 0) {
+    onProgress?.(`Loaded from cache! (${cached.chapters.length} chapters)`);
+    return cached;
+  }
+
+  const candidateTitles = [cleanMain, title, ...alternateTitles]
+    .map(t => t ? t.replace(/[\(\[\{\\\/].*?[\)\]\}]/g, '').trim() : '')
+    .filter((t, idx, self) => t.length > 0 && self.indexOf(t) === idx);
+
+  // Helper with 4.5s max timeout per chapter fetch so slow/hanging sources never block resolution
+  const getMangaDetailsWithTimeout = (mId: string | number, force: boolean) =>
+    Promise.race([
+      getMangaDetails(mId, force),
+      new Promise<Manga | null>((resolve) =>
+        setTimeout(() => resolve(null), 4500)
+      ),
+    ]);
+
+  for (let i = 0; i < candidateTitles.length; i++) {
+    const queryTerm = candidateTitles[i];
+    onProgress?.(`Searching active sources for "${queryTerm}"...`);
+    try {
+      const searchRes = await searchMultiSource([], queryTerm, 1, false);
+      if (searchRes.mangas && searchRes.mangas.length > 0) {
+        // Sort matches: exact title match first
+        const queryLower = queryTerm.toLowerCase();
+        const sortedMatches = [...searchRes.mangas].sort((a, b) => {
+          const aExact = a.title.toLowerCase().trim() === queryLower ? 0 : 1;
+          const bExact = b.title.toLowerCase().trim() === queryLower ? 0 : 1;
+          return aExact - bExact;
+        });
+
+        // Try top candidate matches (up to 3) in order
+        for (let mIdx = 0; mIdx < Math.min(3, sortedMatches.length); mIdx++) {
+          const candidateMatch = sortedMatches[mIdx];
+          if (!candidateMatch || !candidateMatch.id) continue;
+
+          const srcName = candidateMatch.sourceName || 'extension';
+          onProgress?.(`Match found on ${srcName}! Fetching chapter list...`);
+
+          // Fast DB query first
+          let fullDetails = await getMangaDetailsWithTimeout(candidateMatch.id, false);
+          if (!fullDetails || !fullDetails.chapters || fullDetails.chapters.length === 0) {
+            onProgress?.(`Scraping live chapters from ${srcName}...`);
+            fullDetails = await getMangaDetailsWithTimeout(candidateMatch.id, true);
+          }
+
+          if (fullDetails && fullDetails.chapters && fullDetails.chapters.length > 0) {
+            onProgress?.(`Success! Found ${fullDetails.chapters.length} chapters on ${fullDetails.sourceName}.`);
+            setCachedData(cacheKey, fullDetails, 60);
+            return fullDetails;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('Failed resolving title candidate:', queryTerm, e);
+    }
+  }
+
+  onProgress?.('No active source scrapers found chapters for this title.');
+  return null;
 }
 
 // ──────────────── MANGA DETAILS ────────────────
@@ -1635,6 +1732,84 @@ export async function clearCachedImages(): Promise<boolean> {
     await queryGraphQL('mutation { clearCachedImages(input: {}) { clientMutationId } }');
     return true;
   } catch { return false; }
+}
+
+// ──────────────── SITE STATS ────────────────
+
+export async function getSiteStats(): Promise<SiteStats> {
+  const cacheKey = 'site_stats_v1';
+  const cached = getCachedData<SiteStats>(cacheKey);
+  if (cached) return cached;
+
+  const defaults: SiteStats = {
+    totalManga: 0,
+    totalChapters: 0,
+    activeSources: 0,
+    librarySize: 0,
+    recentChapters7d: 0,
+  };
+
+  try {
+    // Query total counts from Suwayomi GraphQL
+    const [countRes, sourcesRes] = await Promise.all([
+      queryGraphQL(`{
+        mangas { totalCount }
+        chapters { totalCount }
+      }`),
+      getSources(false, true),
+    ]);
+
+    const totalManga = countRes?.data?.mangas?.totalCount ?? 0;
+    const totalChapters = countRes?.data?.chapters?.totalCount ?? 0;
+    const activeSources = sourcesRes?.length ?? 0;
+
+    // Query library count
+    let librarySize = 0;
+    try {
+      const libRes = await queryGraphQL(`{
+        mangas(condition: { inLibrary: true }) { totalCount }
+      }`);
+      librarySize = libRes?.data?.mangas?.totalCount ?? 0;
+    } catch {
+      // Some Suwayomi versions may not support condition filter
+    }
+
+    // Estimate recent chapter updates from last 7 days
+    // Query the most recent chapters and count those within 7 days
+    let recentChapters7d = 0;
+    try {
+      const sevenDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+      const recentRes = await queryGraphQL(`{
+        chapters(orderBy: UPLOAD_DATE, orderByFilter: DESC, first: 200) {
+          nodes {
+            uploadDate
+          }
+        }
+      }`);
+      const nodes = recentRes?.data?.chapters?.nodes || [];
+      recentChapters7d = nodes.filter((c: any) => {
+        if (!c.uploadDate) return false;
+        const uploadTs = typeof c.uploadDate === 'number' ? c.uploadDate : new Date(c.uploadDate).getTime();
+        return uploadTs >= sevenDaysAgo;
+      }).length;
+    } catch {
+      // Ordering may not be supported on all Suwayomi versions
+    }
+
+    const stats: SiteStats = {
+      totalManga,
+      totalChapters,
+      activeSources,
+      librarySize,
+      recentChapters7d,
+    };
+
+    setCachedData(cacheKey, stats, 10); // Cache for 10 minutes
+    return stats;
+  } catch (e) {
+    console.error('Failed to fetch site stats:', e);
+    return defaults;
+  }
 }
 
 // ──────────────── EXTENSION STORES ────────────────

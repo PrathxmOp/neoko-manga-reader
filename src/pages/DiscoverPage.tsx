@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Manga, HistoryItem } from '../types/manga';
-import { searchMultiSource, filterMangaByContentRating, getSourceName } from '../services/suwayomiApi';
+import { searchMultiSource, filterMangaByContentRating, getSourceName, getLatestUpdates } from '../services/suwayomiApi';
+import { searchAniList } from '../services/anilistApi';
 import { getEnabledSourceIds, getCachedData, setCachedData, getContinueReadingList, getTopGenres, isSourceEnabled } from '../services/storage';
 import { MangaCard } from '../components/MangaCard';
 import { formatTimeAgo } from '../utils/dateUtils';
@@ -123,7 +124,7 @@ export const DiscoverPage: React.FC = () => {
     };
   }, []);
 
-  // Quick Search handler
+  // Quick Search handler powered by AniList (~350ms instant response)
   useEffect(() => {
     if (!quickSearchQuery.trim()) {
       setQuickSearchResults([]);
@@ -133,15 +134,20 @@ export const DiscoverPage: React.FC = () => {
     const timer = setTimeout(async () => {
       setIsSearching(true);
       try {
-        const activeIds = getEnabledSourceIds();
-        const res = await searchMultiSource(activeIds, quickSearchQuery.trim(), 1, false);
-        setQuickSearchResults(res.mangas || []);
+        const res = await searchAniList(quickSearchQuery.trim(), 1, 6);
+        if ((!res.mangas || res.mangas.length === 0) && quickSearchQuery.trim().length > 0) {
+          const activeIds = getEnabledSourceIds();
+          const fallbackRes = await searchMultiSource(activeIds, quickSearchQuery.trim(), 1, false);
+          setQuickSearchResults(fallbackRes.mangas || []);
+        } else {
+          setQuickSearchResults(res.mangas || []);
+        }
       } catch (e) {
         console.error(e);
       } finally {
         setIsSearching(false);
       }
-    }, 400);
+    }, 350);
     return () => clearTimeout(timer);
   }, [quickSearchQuery]);
 
@@ -172,22 +178,29 @@ export const DiscoverPage: React.FC = () => {
     if (showLoader) setLoading(true);
     try {
       const activeIds = getEnabledSourceIds();
-      const res = await searchMultiSource(activeIds, '', 1, forceRefresh);
-      if (res.mangas.length > 0) {
-        const enrich = (list: Manga[]) => (list || [])
-          .map(m => ({ ...m, sourceName: getSourceName(m.sourceId, m.sourceName) }))
-          .filter(m => isSourceEnabled(m.sourceId, m.sourceName));
-        const catalog = enrich(res.mangas);
-        const pop = catalog.slice(0, 6);
-        const added = catalog.slice(6, 12).length ? catalog.slice(6, 12) : catalog.slice(0, 4);
-        const updated = catalog.slice(12, 20).length ? catalog.slice(12, 20) : catalog.slice(0, 8);
+      const [popRes, latestRes] = await Promise.all([
+        searchMultiSource(activeIds, '', 1, forceRefresh, 'POPULAR'),
+        getLatestUpdates(20, forceRefresh),
+      ]);
 
+      const enrich = (list: Manga[]) => (list || [])
+        .map(m => ({ ...m, sourceName: getSourceName(m.sourceId, m.sourceName) }))
+        .filter(m => isSourceEnabled(m.sourceId, m.sourceName));
+
+      const popCatalog = enrich(popRes.mangas || []);
+      const pop = popCatalog.slice(0, 8);
+      const added = popCatalog.slice(8, 14).length ? popCatalog.slice(8, 14) : popCatalog.slice(0, 6);
+
+      const realLatest = enrich(latestRes);
+      const updated = realLatest.length > 0 ? realLatest : popCatalog.slice(4, 12);
+
+      if (pop.length > 0) {
         setPopularManga(pop);
         setRecentlyAdded(added);
         setRecentlyUpdated(updated);
 
         // Cache home catalog for fast instant loading next time
-        setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 30);
+        setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
       } else {
         const demos = getDemoMangas();
         setPopularManga(demos);
@@ -268,7 +281,17 @@ export const DiscoverPage: React.FC = () => {
       )}
       {/* 0. Quick Search Bar */}
       <section className="relative z-30">
-        <div className="relative flex items-center w-full">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (quickSearchQuery.trim()) {
+              const q = quickSearchQuery.trim();
+              setQuickSearchQuery('');
+              navigate(`/browse?q=${encodeURIComponent(q)}`);
+            }
+          }}
+          className="relative flex items-center w-full"
+        >
           <Search className="absolute left-4 w-5 h-5 text-[#9d86e9]" />
           <input
             type="text"
@@ -279,52 +302,68 @@ export const DiscoverPage: React.FC = () => {
           />
           {quickSearchQuery && (
             <button
+              type="button"
               onClick={() => setQuickSearchQuery('')}
               className="absolute right-4 p-1 rounded-full text-[#7c779b] hover:text-white hover:bg-white/10 transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           )}
-        </div>
+        </form>
 
         {/* Live Search Results Dropdown Overlay */}
         {quickSearchQuery.trim().length > 0 && (
-          <div className="absolute top-full left-0 right-0 mt-2 bg-[#161327]/95 border border-[#2b2746] rounded-2xl shadow-2xl backdrop-blur-xl p-4 max-h-[480px] overflow-y-auto z-40 space-y-3">
+          <div className="absolute top-full left-0 right-0 mt-2 bg-[#161327]/95 border border-[#2b2746] rounded-2xl shadow-2xl backdrop-blur-xl p-4 max-h-[480px] overflow-y-auto z-40 space-y-3 animate-fade-in">
             <div className="flex items-center justify-between border-b border-[#2b2746] pb-2">
               <span className="text-xs font-bold text-[#9d86e9] flex items-center gap-1.5">
                 <Search className="w-3.5 h-3.5" />
-                Search Results for "{quickSearchQuery}"
+                Quick Results for "{quickSearchQuery}"
               </span>
               {isSearching && <Loader2 className="w-4 h-4 text-[#9d86e9] animate-spin" />}
             </div>
 
             {!isSearching && quickSearchResults.length === 0 ? (
-              <div className="text-center py-6 text-xs text-[#7c779b]">No manga found. Try another query or check active sources.</div>
+              <div className="text-center py-6 text-xs text-[#7c779b]">No titles found. Press Enter to search catalog.</div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                {quickSearchResults.slice(0, 6).map((manga) => (
-                  <div
-                    key={manga.id}
-                    onClick={() => {
-                      setQuickSearchQuery('');
-                      navigate(`/manga/${manga.id}`);
-                    }}
-                    className="flex items-center gap-3 p-2 rounded-xl bg-[#231f3d]/60 hover:bg-[#231f3d] border border-[#2b2746] hover:border-[#9d86e9]/40 cursor-pointer transition-all group"
-                  >
-                    <img
-                      src={manga.thumbnailUrl}
-                      alt={manga.title}
-                      className="w-12 h-16 object-cover rounded-lg shrink-0"
-                    />
-                    <div className="flex flex-col min-w-0">
-                      <span className="text-xs font-bold text-white group-hover:text-[#9d86e9] truncate transition-colors">
-                        {manga.title}
-                      </span>
-                      <span className="text-[10px] text-[#7c779b] truncate">{manga.author || manga.sourceName || 'Manga'}</span>
-                      <span className="text-[10px] text-[#9d86e9] font-medium mt-1">Click to read →</span>
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {quickSearchResults.slice(0, 6).map((manga) => (
+                    <div
+                      key={manga.id}
+                      onClick={() => {
+                        setQuickSearchQuery('');
+                        navigate(`/manga/${manga.id}`, { state: { title: manga.title } });
+                      }}
+                      className="flex items-center gap-3 p-2 rounded-xl bg-[#231f3d]/60 hover:bg-[#231f3d] border border-[#2b2746] hover:border-[#9d86e9]/40 cursor-pointer transition-all group"
+                    >
+                      <img
+                        src={manga.thumbnailUrl}
+                        alt={manga.title}
+                        className="w-12 h-16 object-cover rounded-lg shrink-0"
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-xs font-bold text-white group-hover:text-[#9d86e9] truncate transition-colors">
+                          {manga.title}
+                        </span>
+                        <span className="text-[10px] text-[#7c779b] truncate">{manga.genre ? (Array.isArray(manga.genre) ? manga.genre.slice(0, 2).join(', ') : manga.genre) : 'Manga'}</span>
+                        <span className="text-[10px] text-[#9d86e9] font-medium mt-1">Open manga →</span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <div className="pt-2 border-t border-[#2b2746] flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const q = quickSearchQuery.trim();
+                      setQuickSearchQuery('');
+                      navigate(`/browse?q=${encodeURIComponent(q)}`);
+                    }}
+                    className="text-xs font-bold text-[#9d86e9] hover:underline flex items-center gap-1"
+                  >
+                    <span>View full results page →</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -695,3 +734,6 @@ function getDemoMangas(): Manga[] {
     },
   ];
 }
+
+export default DiscoverPage;
+

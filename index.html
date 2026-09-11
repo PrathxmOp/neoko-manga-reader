@@ -1,31 +1,43 @@
 <!DOCTYPE html>
 <html lang="en" class="dark">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-    <title>NEOKO — Modern Manga Stream & Web Reader</title>
-    <meta name="description" content="Immersive, fast, and high-performance manga web reader powered by Suwayomi. Read manga, manhwa, and comics from hundreds of sources." />
-    <meta name="theme-color" content="#10131d" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="NEOKO" />
-    
-    <!-- Open Graph -->
-    <meta property="og:type" content="website" />
-    <meta property="og:title" content="NEOKO — Modern Manga Reader" />
-    <meta property="og:description" content="Read manga, manhwa, and comics from hundreds of sources. Self-hosted, fast, and immersive." />
-    <meta property="og:site_name" content="NEOKO" />
-    
-    <!-- Favicon -->
-    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
-    
-    <!-- Preconnect to Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
-  </head>
-  <body class="bg-surface font-sans text-on-surface flex flex-col min-h-screen overflow-x-hidden antialiased selection:bg-primary/30 selection:text-primary">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>NEOKO — Modern Manga Stream & Web Reader</title>
+  <meta name="description"
+    content="Immersive, fast, and high-performance manga web reader powered by Suwayomi. Read manga, manhwa, and comics from hundreds of sources." />
+  <meta name="theme-color" content="#10131d" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="NEOKO" />
+
+  <!-- Open Graph -->
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="NEOKO — Modern Manga Reader" />
+  <meta property="og:description"
+    content="Read manga, manhwa, and comics from hundreds of sources. Fast, and immersive." />
+  <meta property="og:site_name" content="NEOKO" />
+
+  <!-- Favicon -->
+  <link rel="icon"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔮</text></svg>" />
+
+  <!-- Preconnect to Google Fonts & Razorpay -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://checkout.razorpay.com" />
+  <link rel="preload" href="https://checkout.razorpay.com/v1/payment-button.js" as="script" />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+    rel="stylesheet" />
+</head>
+
+<body
+  class="bg-surface font-sans text-on-surface flex flex-col min-h-screen overflow-x-hidden antialiased selection:bg-primary/30 selection:text-primary">
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+
 </html>

@@ -3,7 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { Home, Search, Clock, BookOpen, BarChart3, Settings, EyeOff } from 'lucide-react';
 import { getIncognitoMode } from '../services/storage';
 
-export const BottomDock: React.FC = () => {
+export const BottomDock: React.FC = React.memo(() => {
   const navigate = useNavigate();
   const location = useLocation();
   const [incognito, setIncognito] = useState(() => getIncognitoMode());
@@ -58,4 +58,4 @@ export const BottomDock: React.FC = () => {
       </nav>
     </div>
   );
-};
+});

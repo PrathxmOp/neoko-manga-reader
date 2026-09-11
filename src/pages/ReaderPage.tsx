@@ -22,6 +22,7 @@ interface MangaPageImgProps {
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';
+  retryTrigger?: number;
   onLoad: (index: number) => void;
   onError: (index: number) => void;
 }
@@ -32,46 +33,78 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
   alt,
   className,
   loading = 'lazy',
+  retryTrigger = 0,
   onLoad,
   onError,
 }) => {
   const [src, setSrc] = useState(originalUrl);
-  const [attemptState, setAttemptState] = useState<'initial' | 'cacheBuster' | 'blob' | 'failed'>('initial');
+  const [retryCount, setRetryCount] = useState(0);
+  const [isDone, setIsDone] = useState(false);
+  const maxRetries = 4;
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setSrc(originalUrl);
-    setAttemptState('initial');
-  }, [originalUrl]);
+    setRetryCount(0);
+    setIsDone(false);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+  }, [originalUrl, retryTrigger]);
 
   const handleErr = async () => {
-    if (attemptState === 'initial') {
-      setAttemptState('cacheBuster');
-      const busterUrl = originalUrl + (originalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
-      setSrc(busterUrl);
-    } else if (attemptState === 'cacheBuster') {
-      setAttemptState('blob');
-      const blobUrl = await fetchAuthenticatedImageBlob(originalUrl);
-      if (blobUrl) {
-        setSrc(blobUrl);
-      } else {
-        setAttemptState('failed');
-        onError(pageIndex);
-      }
-    } else {
-      setAttemptState('failed');
+    if (isDone) return;
+
+    const nextRetry = retryCount + 1;
+    if (nextRetry > maxRetries) {
+      setIsDone(true);
       onError(pageIndex);
+      return;
     }
+
+    setRetryCount(nextRetry);
+
+    // Exponential delay for auto retries: ~400ms, 800ms, 1200ms, 1800ms
+    const delay = Math.min(400 * Math.pow(1.4, nextRetry - 1), 2000);
+
+    timeoutRef.current = setTimeout(async () => {
+      if (nextRetry === 1) {
+        // Try Cache-Buster query
+        const busterUrl = originalUrl + (originalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
+        setSrc(busterUrl);
+      } else if (nextRetry === 2 || nextRetry === 4) {
+        // Try Authenticated Blob fetch via backend API
+        const blobUrl = await fetchAuthenticatedImageBlob(originalUrl);
+        if (blobUrl) {
+          setSrc(blobUrl);
+        } else {
+          setSrc(originalUrl + (originalUrl.includes('?') ? '&' : '?') + 'r=' + Date.now());
+        }
+      } else {
+        // Retry original URL fresh
+        setSrc(originalUrl);
+      }
+    }, delay);
   };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
 
   return (
     <img
       src={src}
       alt={alt}
       loading={loading}
+      decoding="async"
       onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
-      onLoad={() => onLoad(pageIndex)}
+      onLoad={() => {
+        setIsDone(true);
+        onLoad(pageIndex);
+      }}
       onError={handleErr}
+
       className={className}
     />
   );
@@ -165,6 +198,7 @@ export const ReaderPage: React.FC = () => {
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitialScrollLock = useRef(true);
   const initialStartPageRef = useRef(1);
+  const isFirstChapterLoad = useRef(true);
 
   const lastTapRef = useRef<number>(0);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -323,6 +357,7 @@ export const ReaderPage: React.FC = () => {
   // Image preload & chapter load tracking state
   const [loadedPages, setLoadedPages] = useState<Set<number>>(new Set());
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
+  const [pageRetryKeys, setPageRetryKeys] = useState<Record<number, number>>({});
 
   const handleImageLoad = (index: number) => {
     setLoadedPages(prev => {
@@ -340,21 +375,10 @@ export const ReaderPage: React.FC = () => {
     }
   };
 
-  const handleManualRetryPage = async (index: number) => {
+  const handleManualRetryPage = (index: number) => {
     setFailedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
     setLoadedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
-
-    const rawUrl = pages[index];
-    if (rawUrl) {
-      const blobUrl = await fetchAuthenticatedImageBlob(rawUrl);
-      if (blobUrl) {
-        setPages(prev => {
-          const next = [...prev];
-          next[index] = blobUrl;
-          return next;
-        });
-      }
-    }
+    setPageRetryKeys(prev => ({ ...prev, [index]: (prev[index] || 0) + 1 }));
   };
 
   // Sequential image preloader to prevent network congestion/timeouts over proxy tunnels
@@ -474,82 +498,41 @@ export const ReaderPage: React.FC = () => {
     }
   }, [currentPage, pages.length, chapterId, chapterDetails]);
 
-  const loadPages = async (id: string) => {
+  const loadPages = async (id: string, forceRefresh: boolean = false) => {
+    // Scroll to top immediately when loading a new chapter
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+
     setLoading(true);
     setShowSettingsDrawer(false);
     setShowChapterListModal(false);
-    setLoading(true);
     setLoadedPages(new Set());
     setFailedPages(new Set());
     try {
       const [pageUrls, details] = await Promise.all([
-        getChapterPages(id),
+        getChapterPages(id, forceRefresh),
         getChapterDetails(id),
       ]);
 
+      if (pageUrls.length === 0) {
+        console.warn(`[ReaderPage] Chapter ${id} returned 0 pages. The source might be unavailable or the chapter may not be fetched yet.`);
+      }
+
+      // Only restore saved reading position on first chapter load (entering reader from outside).
+      // When switching chapters via Next/Prev, always start from page 1.
       const historyItems = getHistory();
       const savedItem = historyItems.find(h => String(h.chapterId) === String(id));
       const urlPage = parseInt(searchParams.get('page') || '0', 10);
-      const startPage = urlPage > 0 ? urlPage : (savedItem?.pageIndex || 1);
+      const rawStartPage = urlPage > 0 ? urlPage : (isFirstChapterLoad.current && savedItem?.pageIndex ? savedItem.pageIndex : 1);
+      isFirstChapterLoad.current = false;
+      const startPage = pageUrls.length > 0 ? Math.max(1, Math.min(rawStartPage, pageUrls.length)) : 1;
       
       isInitialScrollLock.current = true;
       initialStartPageRef.current = startPage;
       setCurrentPage(startPage);
 
-      let foundNextPrev = false;
-      let mangaGenres: string[] = [];
-
-      if (details) {
-        setChapterDetails(details);
-        if (details.mangaId) {
-          autoBindTrackers(details.mangaId, details.mangaTitle || '').catch(err => console.error('Auto bind error in reader:', err));
-          try {
-            const mangaData = await getMangaDetails(details.mangaId);
-            if (mangaData) {
-              // Extract genres for stats tracking
-              if (mangaData.genre) {
-                mangaGenres = Array.isArray(mangaData.genre)
-                  ? mangaData.genre
-                  : typeof mangaData.genre === 'string'
-                    ? mangaData.genre.split(',').map((g: string) => g.trim()).filter(Boolean)
-                    : [];
-              }
-              if (mangaData.chapters && mangaData.chapters.length > 0) {
-                const chaptersList = mangaData.chapters;
-                const hasChapterNumbers = chaptersList.some(c => c.chapterNumber !== undefined);
-                const sorted = [...chaptersList];
-                if (hasChapterNumbers) {
-                  sorted.sort((a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0));
-                }
-                setAllChapters(sorted);
-                const idx = sorted.findIndex(c => String(c.id) === String(id));
-                if (idx !== -1) {
-                  setPrevChapter(idx > 0 ? sorted[idx - 1] : null);
-                  setNextChapter(idx < sorted.length - 1 ? sorted[idx + 1] : null);
-                  foundNextPrev = true;
-                }
-              }
-            }
-          } catch (err) {
-            console.error('Failed to fetch manga chapters:', err);
-          }
-        }
-      }
-
-      // Demo fallback if next/prev chapter not found from server
-      if (!foundNextPrev) {
-        const numericId = parseInt(id, 10);
-        if (!isNaN(numericId)) {
-          setPrevChapter(numericId > 1 ? { id: String(numericId - 1), name: `Chapter ${numericId - 1}` } : null);
-          setNextChapter({ id: String(numericId + 1), name: `Chapter ${numericId + 1}` });
-        } else {
-          setPrevChapter(null);
-          setNextChapter(null);
-        }
-      }
-
       if (pageUrls.length > 0) {
         setPages(pageUrls);
+        setLoading(false); // Render chapter immediately!
         addHistoryItem({
           mangaId: details?.mangaId || '1',
           mangaTitle: details?.mangaTitle || 'Manga Chapter',
@@ -564,11 +547,35 @@ export const ReaderPage: React.FC = () => {
         }
       } else {
         setPages([]);
+        setLoading(false);
+      }
+
+      // Asynchronously fetch manga metadata & chapters list in background without blocking UI
+      if (details) {
+        setChapterDetails(details);
+        if (details.mangaId) {
+          autoBindTrackers(details.mangaId, details.mangaTitle || '').catch(err => console.error('Auto bind error in reader:', err));
+          getMangaDetails(details.mangaId).then(mangaData => {
+            if (mangaData && mangaData.chapters && mangaData.chapters.length > 0) {
+              const chaptersList = mangaData.chapters;
+              const hasChapterNumbers = chaptersList.some(c => c.chapterNumber !== undefined);
+              const sorted = [...chaptersList];
+              if (hasChapterNumbers) {
+                sorted.sort((a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0));
+              }
+              setAllChapters(sorted);
+              const idx = sorted.findIndex(c => String(c.id) === String(id));
+              if (idx !== -1) {
+                setPrevChapter(idx > 0 ? sorted[idx - 1] : null);
+                setNextChapter(idx < sorted.length - 1 ? sorted[idx + 1] : null);
+              }
+            }
+          }).catch(err => console.error('Failed to fetch manga chapters:', err));
+        }
       }
     } catch (e) {
       console.error(e);
       setPages([]);
-    } finally {
       setLoading(false);
     }
   };
@@ -641,7 +648,7 @@ export const ReaderPage: React.FC = () => {
         case '+':
         case '=':
           e.preventDefault();
-          setZoom(z => Math.min(200, z + 15));
+          setZoom(z => Math.min(300, z + 15));
           break;
         case '-':
           e.preventDefault();
@@ -781,14 +788,34 @@ export const ReaderPage: React.FC = () => {
 
   // Helper for image styling in Single & Spread modes
   const getImageStyle = (isSpread = false) => {
-    const baseWidth = isSpread ? 'w-1/2' : 'w-full max-w-4xl';
+    const base = 'mx-auto object-contain rounded-lg shadow-2xl';
     
     if (settings.fitMode === 'width') {
-      return `${baseWidth} h-auto mx-auto object-contain rounded-lg shadow-2xl`;
+      // Fit Width: image fills the available width, height adjusts naturally
+      const widthClass = isSpread ? 'w-full' : 'w-full max-w-[100vw]';
+      return `${widthClass} h-auto ${base}`;
     } else if (settings.fitMode === 'height') {
-      return `max-h-[85vh] w-auto mx-auto object-contain rounded-lg shadow-2xl`;
+      // Fit Height: image constrained to viewport height, width adjusts naturally
+      return `max-h-[85vh] w-auto ${base}`;
     } else {
-      return `max-h-[88vh] max-w-full w-auto mx-auto object-contain rounded-lg shadow-2xl`;
+      // Original / Auto Fit: natural size capped to viewport bounds
+      const maxW = isSpread ? 'max-w-full' : 'max-w-[90vw]';
+      return `max-h-[88vh] ${maxW} w-auto ${base}`;
+    }
+  };
+
+  // Helper for webtoon image classes based on fitMode
+  const getWebtoonImageClass = (isLoaded: boolean) => {
+    const opacityClass = isLoaded ? 'opacity-100' : 'opacity-0';
+    const base = `block object-contain mx-auto transition-opacity duration-300 ${opacityClass}`;
+
+    if (settings.fitMode === 'height') {
+      return `max-h-[85vh] w-auto ${base}`;
+    } else if (settings.fitMode === 'original') {
+      return `max-w-3xl w-auto ${base}`;
+    } else {
+      // Default: Fit Width — fill container width
+      return `w-full h-auto ${base}`;
     }
   };
 
@@ -798,6 +825,46 @@ export const ReaderPage: React.FC = () => {
         <div className="flex flex-col items-center gap-3 text-outline">
           <Loader2 className="w-10 h-10 animate-spin text-primary" />
           <p className="font-sans text-sm font-bold text-on-surface">Loading Chapter Pages...</p>
+        </div>
+      </main>
+    );
+  }
+
+  if (!loading && pages.length === 0) {
+    return (
+      <main className="min-h-screen bg-[#0B0D13] flex flex-col items-center justify-center p-6 text-on-surface">
+        <div className="flex flex-col items-center gap-4 text-center max-w-sm">
+          <div className="w-16 h-16 rounded-full bg-red-500/15 text-red-400 flex items-center justify-center">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <div>
+            <h2 className="font-display text-lg font-bold text-on-surface">No Pages Found</h2>
+            <p className="font-sans text-xs text-outline mt-1">
+              {chapterDetails?.name || `Chapter ${chapterId}`} returned no pages. The source may be temporarily unavailable or the chapter hasn't been fetched yet.
+            </p>
+          </div>
+          <div className="flex items-center gap-3 mt-2">
+            <button
+              onClick={() => { if (chapterId) loadPages(chapterId, true); }}
+              className="px-5 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-on-primary font-bold text-xs flex items-center gap-2 shadow-lg shadow-primary/25 transition-all cursor-pointer"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span>Retry</span>
+            </button>
+            <button
+              onClick={() => {
+                if (chapterDetails?.mangaId) {
+                  navigate(`/manga/${chapterDetails.mangaId}`, { replace: true });
+                } else {
+                  navigate(-1);
+                }
+              }}
+              className="px-5 py-2.5 rounded-xl bg-surface-container-high hover:bg-surface-bright border border-white/5 text-on-surface font-semibold text-xs flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>Go Back</span>
+            </button>
+          </div>
         </div>
       </main>
     );
@@ -827,7 +894,7 @@ export const ReaderPage: React.FC = () => {
             <button
               onClick={() => {
                 if (chapterDetails?.mangaId) {
-                  navigate(`/manga/${chapterDetails.mangaId}`);
+                  navigate(`/manga/${chapterDetails.mangaId}`, { replace: true });
                 } else {
                   navigate(-1);
                 }
@@ -1000,14 +1067,13 @@ export const ReaderPage: React.FC = () => {
         }}
       >
         {settings.mode === 'webtoon' ? (
-          /* Webtoon Continuous Strip (Kagane.to style width-based zoom surface) */
+          /* Webtoon Continuous Strip (zoom surface with fitMode support) */
           <div 
             className="reader-pages-content flex flex-col items-center mx-auto space-y-2 px-2"
             data-zoom-surface="true"
             style={{
-              width: zoom > 100 ? `${zoom}%` : '100%',
-              maxWidth: zoom > 100 ? 'none' : '48rem',
-              minWidth: '100%',
+              width: `${zoom}%`,
+              maxWidth: zoom > 100 ? 'none' : (settings.fitMode === 'original' ? '48rem' : (settings.fitMode === 'height' ? 'none' : '48rem')),
               lineHeight: 0,
               fontSize: '0px',
               position: 'relative',
@@ -1071,14 +1137,13 @@ export const ReaderPage: React.FC = () => {
                     originalUrl={url}
                     alt={`Page ${index + 1}`}
                     loading="lazy"
+                    retryTrigger={pageRetryKeys[index] || 0}
                     onLoad={handleImageLoad}
                     onError={(idx) => {
                       setFailedPages(prev => new Set(prev).add(idx));
                       handleImageLoad(idx);
                     }}
-                    className={`w-full h-auto block object-contain mx-auto transition-opacity duration-300 ${
-                      isLoaded ? 'opacity-100' : 'opacity-0'
-                    }`}
+                    className={getWebtoonImageClass(isLoaded)}
                   />
                 </div>
               );
@@ -1129,6 +1194,7 @@ export const ReaderPage: React.FC = () => {
                       pageIndex={currentPage - 1}
                       originalUrl={pages[currentPage - 1]}
                       alt={`Page ${currentPage}`}
+                      retryTrigger={pageRetryKeys[currentPage - 1] || 0}
                       onLoad={handleImageLoad}
                       onError={(idx) => {
                         setFailedPages(prev => new Set(prev).add(idx));
@@ -1180,6 +1246,7 @@ export const ReaderPage: React.FC = () => {
                       pageIndex={currentPage}
                       originalUrl={pages[currentPage]}
                       alt={`Page ${currentPage + 1}`}
+                      retryTrigger={pageRetryKeys[currentPage] || 0}
                       onLoad={handleImageLoad}
                       onError={(idx) => {
                         setFailedPages(prev => new Set(prev).add(idx));
@@ -1201,65 +1268,72 @@ export const ReaderPage: React.FC = () => {
               transformOrigin: 'center center',
               willChange: zoom > 100 ? 'transform' : 'auto',
             }}>
-            {pages.length > 0 && (
-              <div className="relative w-full flex items-center justify-center min-h-[500px] select-none">
-                <TranslationOverlay
-                  isEnabled={isTranslationEnabled}
-                  loading={translations[currentPage - 1]?.loading}
-                  bubbles={translations[currentPage - 1]?.bubbles}
-                  error={translations[currentPage - 1]?.error}
-                  onRetry={() => handleTranslatePage(currentPage - 1)}
-                />
-                {failedPages.has(currentPage - 1) ? (
-                  <div className="w-full max-w-lg min-h-[350px] bg-[#161327] rounded-2xl border border-red-500/20 p-8 flex flex-col items-center justify-center gap-3 my-auto text-center select-none">
-                    <AlertCircle className="w-10 h-10 text-red-400" />
-                    <div>
-                      <p className="text-sm text-white font-semibold">Page {currentPage} Failed to Load</p>
-                      <p className="text-xs text-[#7c779b] mt-1">The image could not be fetched from the source server</p>
-                    </div>
-                    <button
-                      onClick={() => handleManualRetryPage(currentPage - 1)}
-                      className="px-4 py-2 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer mt-2"
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      <span>Retry Page {currentPage}</span>
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    {!loadedPages.has(currentPage - 1) && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
-                        <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                        <span className="text-xs font-semibold text-outline">Loading Page {currentPage}...</span>
+            {pages.length > 0 && (() => {
+              const safeIdx = Math.max(0, Math.min(currentPage - 1, pages.length - 1));
+              const displayNum = safeIdx + 1;
+              const pageUrl = pages[safeIdx];
+
+              return (
+                <div className="relative w-full flex items-center justify-center min-h-[500px] select-none">
+                  <TranslationOverlay
+                    isEnabled={isTranslationEnabled}
+                    loading={translations[safeIdx]?.loading}
+                    bubbles={translations[safeIdx]?.bubbles}
+                    error={translations[safeIdx]?.error}
+                    onRetry={() => handleTranslatePage(safeIdx)}
+                  />
+                  {failedPages.has(safeIdx) ? (
+                    <div className="w-full max-w-lg min-h-[350px] bg-[#161327] rounded-2xl border border-red-500/20 p-8 flex flex-col items-center justify-center gap-3 my-auto text-center select-none">
+                      <AlertCircle className="w-10 h-10 text-red-400" />
+                      <div>
+                        <p className="text-sm text-white font-semibold">Page {displayNum} Failed to Load</p>
+                        <p className="text-xs text-[#7c779b] mt-1">The image could not be fetched from the source server</p>
                       </div>
-                    )}
-                    <div 
-                      className="absolute inset-0 z-15 bg-transparent cursor-default"
-                      onContextMenu={(e) => e.preventDefault()}
-                      onDragStart={(e) => e.preventDefault()}
-                    />
-                    <MangaPageImg
-                      pageIndex={currentPage - 1}
-                      originalUrl={pages[currentPage - 1]}
-                      alt={`Page ${currentPage}`}
-                      onLoad={handleImageLoad}
-                      onError={(idx) => {
-                        setFailedPages(prev => new Set(prev).add(idx));
-                        handleImageLoad(idx);
-                      }}
-                      className={`${getImageStyle(false)} transition-opacity duration-300 ${
-                        loadedPages.has(currentPage - 1) ? 'opacity-100' : 'opacity-0'
-                      }`}
-                    />
-                  </>
-                )}
-              </div>
-            )}
+                      <button
+                        onClick={() => handleManualRetryPage(safeIdx)}
+                        className="px-4 py-2 rounded-xl bg-primary/20 hover:bg-primary/30 text-primary text-xs font-bold flex items-center gap-2 transition-colors cursor-pointer mt-2"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        <span>Retry Page {displayNum}</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      {!loadedPages.has(safeIdx) && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
+                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                          <span className="text-xs font-semibold text-outline">Loading Page {displayNum}...</span>
+                        </div>
+                      )}
+                      <div 
+                        className="absolute inset-0 z-15 bg-transparent cursor-default"
+                        onContextMenu={(e) => e.preventDefault()}
+                        onDragStart={(e) => e.preventDefault()}
+                      />
+                      <MangaPageImg
+                        pageIndex={safeIdx}
+                        originalUrl={pageUrl}
+                        alt={`Page ${displayNum}`}
+                        retryTrigger={pageRetryKeys[safeIdx] || 0}
+                        onLoad={handleImageLoad}
+                        onError={(idx) => {
+                          setFailedPages(prev => new Set(prev).add(idx));
+                          handleImageLoad(idx);
+                        }}
+                        className={`${getImageStyle(false)} transition-opacity duration-300 ${
+                          loadedPages.has(safeIdx) ? 'opacity-100' : 'opacity-0'
+                        }`}
+                      />
+                    </>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
         {/* End of Chapter Navigation Card (Shown in Webtoon mode or at end of Single/Spread mode) */}
-        {(settings.mode === 'webtoon' || (settings.mode === 'single' && currentPage === pages.length) || (settings.mode === 'double' && currentPage >= pages.length - 1)) && (
+        {pages.length > 0 && (settings.mode === 'webtoon' || (settings.mode === 'single' && currentPage === pages.length) || (settings.mode === 'double' && currentPage >= pages.length - 1)) && (
           <div className="w-full max-w-lg mx-auto my-10 px-4 animate-fade-in">
             <div className="p-6 rounded-2xl glass-panel border border-white/10 text-center flex flex-col items-center gap-3 shadow-2xl">
               <div className="w-12 h-12 rounded-full bg-primary/20 text-primary flex items-center justify-center shadow-inner">
@@ -1292,7 +1366,7 @@ export const ReaderPage: React.FC = () => {
                   </button>
                 ) : (
                   <button
-                    onClick={() => navigate(chapterDetails?.mangaId ? `/manga/${chapterDetails.mangaId}` : '/')}
+                    onClick={() => navigate(chapterDetails?.mangaId ? `/manga/${chapterDetails.mangaId}` : '/', { replace: true })}
                     className="flex-1 py-2.5 px-3 rounded-xl bg-primary text-on-primary font-bold text-xs flex items-center justify-center gap-2"
                   >
                     Back to Details
@@ -1377,7 +1451,7 @@ export const ReaderPage: React.FC = () => {
             <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
               {/* Zoom Out */}
               <button
-                onClick={() => setZoom(z => Math.max(50, z - 15))}
+                onClick={() => { setZoom(z => { const nz = Math.max(50, z - 15); if (nz <= 100) setPanOffset({ x: 0, y: 0 }); return nz; }); }}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl text-outline hover:text-on-surface hover:bg-surface-container-high flex items-center justify-center transition-colors shrink-0"
                 title="Zoom Out (-)"
               >
@@ -1386,7 +1460,7 @@ export const ReaderPage: React.FC = () => {
 
               {/* Zoom In */}
               <button
-                onClick={() => setZoom(z => Math.min(200, z + 15))}
+                onClick={() => setZoom(z => Math.min(300, z + 15))}
                 className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl text-outline hover:text-on-surface hover:bg-surface-container-high flex items-center justify-center transition-colors shrink-0"
                 title="Zoom In (+)"
               >
@@ -1945,4 +2019,4 @@ function getDemoPages(): string[] {
   return [];
 }
 
-
+export default ReaderPage;

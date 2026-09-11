@@ -256,3 +256,11 @@ export interface ServerInfo {
   github: string;
   discord: string;
 }
+
+export interface SiteStats {
+  totalManga: number;
+  totalChapters: number;
+  activeSources: number;
+  librarySize: number;
+  recentChapters7d: number;
+}

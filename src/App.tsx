@@ -5,22 +5,31 @@ import { ToastProvider } from './contexts/ToastContext';
 import { getAppSettings, setIncognitoMode } from './services/storage';
 import { Navbar } from './components/Navbar';
 import { BottomDock } from './components/BottomDock';
-import { DiscoverPage } from './pages/DiscoverPage';
-import { SearchBrowsePage } from './pages/SearchBrowsePage';
-import { MangaDetailPage } from './pages/MangaDetailPage';
-import { ReaderPage } from './pages/ReaderPage';
-import { LibraryPage } from './pages/LibraryPage';
-import { UpdatesPage } from './pages/UpdatesPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { ProfilePage } from './pages/ProfilePage';
-import { StatsPage } from './pages/StatsPage';
-import { CollectionsPage } from './pages/CollectionsPage';
-import { NotFoundPage } from './pages/NotFoundPage';
 import { InstallPrompt } from './components/InstallPrompt';
 import { AntiScraperGuard } from './components/AntiScraperGuard';
 import { WifiOff } from 'lucide-react';
-
 import { TopProgressBar } from './components/TopProgressBar';
+
+const DiscoverPage = React.lazy(() => import('./pages/DiscoverPage'));
+const SearchBrowsePage = React.lazy(() => import('./pages/SearchBrowsePage'));
+const MangaDetailPage = React.lazy(() => import('./pages/MangaDetailPage'));
+const ReaderPage = React.lazy(() => import('./pages/ReaderPage'));
+const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
+const UpdatesPage = React.lazy(() => import('./pages/UpdatesPage'));
+const SettingsPage = React.lazy(() => import('./pages/SettingsPage'));
+const StatsPage = React.lazy(() => import('./pages/StatsPage'));
+const CollectionsPage = React.lazy(() => import('./pages/CollectionsPage'));
+const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
+
+const PageFallback: React.FC = () => (
+  <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center animate-fade-in">
+    <div className="w-12 h-12 rounded-2xl bg-[#9d86e9]/10 border border-[#9d86e9]/30 flex items-center justify-center mb-4 animate-pulse">
+      <div className="w-6 h-6 rounded-lg bg-[#9d86e9]/40" />
+    </div>
+    <div className="h-4 w-32 bg-[#1f1b3a] rounded-full animate-pulse mb-2" />
+    <div className="h-3 w-24 bg-[#1f1b3a]/60 rounded-full animate-pulse" />
+  </div>
+);
 
 // Automatically scroll window to top on every route change
 const ScrollToTop: React.FC = () => {
@@ -84,21 +93,24 @@ export const App: React.FC = () => {
             <div className="min-h-screen bg-[var(--bg-main)] font-sans text-[var(--text-main)] flex flex-col relative selection:bg-primary/30 selection:text-primary pb-20">
               <Navbar />
               <OfflineBanner />
-              <Routes>
-                <Route path="/" element={<DiscoverPage />} />
-                <Route path="/browse" element={<SearchBrowsePage />} />
-                <Route path="/updates" element={<UpdatesPage />} />
-                <Route path="/manga/:mangaId" element={<MangaDetailPage />} />
-                <Route path="/read/:chapterId" element={<ReaderPage />} />
-                <Route path="/read/:mangaId/:chapterId" element={<ReaderPage />} />
-                <Route path="/library" element={<LibraryPage />} />
-                <Route path="/history" element={<LibraryPage defaultTab="History" />} />
-                <Route path="/collections" element={<CollectionsPage />} />
-                <Route path="/stats" element={<StatsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/profile" element={<SettingsPage />} />
-                <Route path="*" element={<NotFoundPage />} />
-              </Routes>
+              <React.Suspense fallback={<PageFallback />}>
+                <Routes>
+                  <Route path="/" element={<DiscoverPage />} />
+                  <Route path="/browse" element={<SearchBrowsePage />} />
+                  <Route path="/updates" element={<UpdatesPage />} />
+                  <Route path="/manga/:mangaId" element={<MangaDetailPage />} />
+                  <Route path="/read/:chapterId" element={<ReaderPage />} />
+                  <Route path="/read/:mangaId/:chapterId" element={<ReaderPage />} />
+                  <Route path="/library" element={<LibraryPage />} />
+                  <Route path="/history" element={<LibraryPage defaultTab="History" />} />
+                  <Route path="/collections" element={<CollectionsPage />} />
+                  <Route path="/stats" element={<StatsPage />} />
+                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/profile" element={<SettingsPage />} />
+                  <Route path="*" element={<NotFoundPage />} />
+                </Routes>
+              </React.Suspense>
+
               <InstallPrompt />
               <BottomDock />
             </div>

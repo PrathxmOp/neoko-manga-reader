@@ -10,7 +10,7 @@ interface ChapterItemProps {
   onToggleRead?: () => void;
 }
 
-export const ChapterItem: React.FC<ChapterItemProps> = ({ chapter, onToggleRead }) => {
+export const ChapterItem: React.FC<ChapterItemProps> = React.memo(({ chapter, onToggleRead }) => {
   const navigate = useNavigate();
   const [readState, setReadState] = useState(Boolean(chapter.read || chapter.isRead || isChapterRead(chapter.id)));
   const isRead = readState;
@@ -113,4 +113,4 @@ export const ChapterItem: React.FC<ChapterItemProps> = ({ chapter, onToggleRead 
       </div>
     </div>
   );
-};
+});

@@ -32,6 +32,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        navigationPreload: true,
+        cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         runtimeCaching: [
           {
@@ -78,10 +80,9 @@ export default defineConfig({
           },
           {
             urlPattern: /\/api\/graphql/i,
-            handler: 'NetworkFirst',
+            handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'graphql-api-cache',
-              networkTimeoutSeconds: 3,
               expiration: {
                 maxEntries: 200,
                 maxAgeSeconds: 60 * 60 * 24 * 7 // 7 Days
@@ -95,6 +96,17 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    target: 'es2020',
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+          'icons': ['lucide-react'],
+        },
+      },
+    },
+  },
   server: {
     port: 3000,
     host: true,
@@ -126,3 +138,4 @@ export default defineConfig({
     },
   },
 });
+

@@ -367,3 +367,10 @@ input[type="range"]::-moz-range-thumb {
 .incognito-goggles-anim {
   animation: sunglassesFloat 2.5s ease-in-out infinite;
 }
+
+/* Performance Utilities */
+.content-visibility-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: 1px 400px;
+}
+

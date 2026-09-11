@@ -340,7 +340,7 @@ export const SettingsPage: React.FC = () => {
   );
 
   const SettingRow = ({ label, desc, children }: { label: string; desc?: string; children: React.ReactNode }) => (
-    <div className="flex items-center justify-between gap-4 py-3 border-b border-[#2b2746]/60 last:border-none">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 py-3 border-b border-[#2b2746]/60 last:border-none">
       <div className="flex flex-col min-w-0">
         <span className="font-sans text-sm font-semibold text-white">{label}</span>
         {desc && <span className="font-sans text-xs text-[#7c779b] mt-0.5">{desc}</span>}
@@ -354,12 +354,12 @@ export const SettingsPage: React.FC = () => {
   );
 
   const SelectPills = ({ options, value, onChange }: { options: { id: string; label: string }[]; value: string; onChange: (v: string) => void }) => (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
       {options.map(o => (
         <button
           key={o.id}
           onClick={() => onChange(o.id)}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap shrink-0 ${
             value === o.id ? 'bg-[#9d86e9] text-[#0c0c14] shadow-sm' : 'bg-[#231f3d] text-[#7c779b] hover:text-white'
           }`}
         >
@@ -416,19 +416,19 @@ export const SettingsPage: React.FC = () => {
       </nav>
 
       {/* 3. Kagane Settings Section Container */}
-      <div className="bg-[#161327] rounded-2xl border border-[#2b2746] p-5 shadow-xl animate-fade-in-up" key={activeTab}>
+      <div className="bg-[#161327] rounded-2xl border border-[#2b2746] p-3.5 sm:p-5 shadow-xl animate-fade-in-up" key={activeTab}>
             {/* ──── GENERAL ──── */}
             {activeTab === 'general' && (
               <div className="space-y-5">
                 <div>
                   <SectionTitle title="Reader Profile Identity" />
-                  <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                  <div className="p-3 sm:p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] flex flex-col gap-4 mt-2">
                     <div className="flex items-center gap-3.5">
-                      <div className="w-14 h-14 rounded-2xl bg-[#231f3d] flex items-center justify-center text-3xl border border-[#9d86e9]/30 shadow-md shrink-0">
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-[#231f3d] flex items-center justify-center text-2xl sm:text-3xl border border-[#9d86e9]/30 shadow-md shrink-0">
                         {user?.avatar || '🔮'}
                       </div>
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
+                      <div className="flex flex-col min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-display font-bold text-base text-white">{user?.username || 'Reader'}</span>
                           <span className="px-2 py-0.5 rounded-md bg-[#9d86e9]/20 text-[#9d86e9] text-[10px] font-extrabold uppercase">
                             Local Profile
@@ -439,7 +439,7 @@ export const SettingsPage: React.FC = () => {
                     </div>
                     <button
                       onClick={() => setIsEditingProfile(!isEditingProfile)}
-                      className="px-4 py-2 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-extrabold text-xs flex items-center gap-1.5 hover:bg-[#8b70e5] transition-colors shadow-sm shrink-0"
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#9d86e9] text-[#0c0c14] font-extrabold text-xs flex items-center justify-center gap-1.5 hover:bg-[#8b70e5] transition-colors shadow-sm shrink-0"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
                       <span>Edit Identity</span>
@@ -567,10 +567,10 @@ export const SettingsPage: React.FC = () => {
                   <ToggleSwitch active={readerSettings.preloadPages} onToggle={() => updateReader({ preloadPages: !readerSettings.preloadPages })} />
                 </SettingRow>
                 <SettingRow label="Auto-Scroll Speed" desc={`Speed: ${readerSettings.autoScrollSpeed}`}>
-                  <input type="range" min={1} max={5} value={readerSettings.autoScrollSpeed} onChange={e => updateReader({ autoScrollSpeed: Number(e.target.value) })} className="w-32" />
+                  <input type="range" min={1} max={5} value={readerSettings.autoScrollSpeed} onChange={e => updateReader({ autoScrollSpeed: Number(e.target.value) })} className="w-28 sm:w-32" />
                 </SettingRow>
                 <SettingRow label="Default Zoom" desc={`${readerSettings.zoomLevel}%`}>
-                  <input type="range" min={50} max={200} step={5} value={readerSettings.zoomLevel} onChange={e => updateReader({ zoomLevel: Number(e.target.value) })} className="w-32" />
+                  <input type="range" min={50} max={200} step={5} value={readerSettings.zoomLevel} onChange={e => updateReader({ zoomLevel: Number(e.target.value) })} className="w-28 sm:w-32" />
                 </SettingRow>
               </div>
             )}
@@ -579,7 +579,7 @@ export const SettingsPage: React.FC = () => {
             {activeTab === 'ai' && (
               <div className="space-y-6">
                 {/* Global AI Master Switch */}
-                <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#9d86e9]/30 flex items-center justify-between gap-4 shadow-lg">
+                <div className="p-3.5 sm:p-4 rounded-2xl bg-[#1c1833] border border-[#9d86e9]/30 flex items-start sm:items-center justify-between gap-3 shadow-lg">
                   <div className="flex items-center gap-3.5">
                     <div className="w-10 h-10 rounded-xl bg-[#9d86e9]/20 text-[#9d86e9] flex items-center justify-center shrink-0">
                       <Sparkles className="w-5 h-5" />
@@ -833,21 +833,23 @@ export const SettingsPage: React.FC = () => {
                 </div>
 
                 {/* Per-extension management shortcut info banner */}
-                <div className="p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] flex flex-col sm:flex-row items-center justify-between gap-3 pt-4">
-                  <div className="flex flex-col">
-                    <span className="font-sans text-xs font-bold text-white">Manage Individual Extensions & Modes</span>
-                    <span className="font-sans text-xs text-[#7c779b] mt-0.5">
-                      Enable/disable specific extension sources, or assign individual extensions to Normal or 18+ mode.
-                    </span>
+                <div className="p-3 sm:p-4 rounded-2xl bg-[#1c1833] border border-[#2b2746] flex flex-col gap-3 pt-3 sm:pt-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex flex-col">
+                      <span className="font-sans text-xs font-bold text-white">Manage Individual Extensions & Modes</span>
+                      <span className="font-sans text-xs text-[#7c779b] mt-0.5">
+                        Enable/disable specific extension sources, or assign individual extensions to Normal or 18+ mode.
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => changeTab('sources')}
+                      className="w-full sm:w-auto px-4 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2e294f] text-[#9d86e9] font-extrabold text-xs flex items-center justify-center gap-1.5 border border-[#39335a] transition-all shrink-0 shadow-sm"
+                    >
+                      <Radio className="w-3.5 h-3.5" />
+                      <span>Go to Sources & Providers</span>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-                  <button
-                    onClick={() => changeTab('sources')}
-                    className="px-4 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2e294f] text-[#9d86e9] font-extrabold text-xs flex items-center gap-1.5 border border-[#39335a] transition-all shrink-0 shadow-sm"
-                  >
-                    <Radio className="w-3.5 h-3.5" />
-                    <span>Go to Sources & Providers</span>
-                    <ChevronRight className="w-3.5 h-3.5" />
-                  </button>
                 </div>
               </div>
             )}
@@ -1103,7 +1105,7 @@ export const SettingsPage: React.FC = () => {
                     />
                   </SettingRow>
                   <SettingRow label="Grid Columns" desc={`${appSettings.gridColumns} columns`}>
-                    <input type="range" min={2} max={6} value={appSettings.gridColumns} onChange={e => updateApp({ gridColumns: Number(e.target.value) })} className="w-32" />
+                    <input type="range" min={2} max={6} value={appSettings.gridColumns} onChange={e => updateApp({ gridColumns: Number(e.target.value) })} className="w-28 sm:w-32" />
                   </SettingRow>
                   <SettingRow label="Animations">
                     <ToggleSwitch active={appSettings.animationsEnabled} onToggle={() => updateApp({ animationsEnabled: !appSettings.animationsEnabled })} />
@@ -1230,7 +1232,7 @@ export const SettingsPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed border-t border-[#2b2746] pt-3">
-                    Hey! I'm <strong>Prathxm</strong>. I built <strong>NEOKO</strong> to create the cleanest, fastest, and most modern manga reading experience — completely free from intrusive ads or bloatware.
+                    Hey! I'm <strong>Prathxm</strong>. I built <strong>NEOKO</strong> for the cleanest manga experience. Currently, NEOKO is hosted locally on my personal laptop (which is why it may feel a bit slow at times). I am raising funds to move it to a 24/7 dedicated high-speed cloud server!
                   </p>
                 </div>
 
@@ -1386,3 +1388,6 @@ export const SettingsPage: React.FC = () => {
       </main>
   );
 };
+
+export default SettingsPage;
+

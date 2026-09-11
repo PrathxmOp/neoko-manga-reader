@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Manga, Chapter, BookmarkItem } from '../types/manga';
-import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText, autoBindTrackers } from '../services/suwayomiApi';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { Manga, Chapter, BookmarkItem, Source } from '../types/manga';
+import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText, autoBindTrackers, resolveMangaFromSourceByTitle, getSourceName, searchMultiSource, getImageUrl, getSources } from '../services/suwayomiApi';
 import { fetchAniListRating, AniListMangaData } from '../services/anilistApi';
 import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters } from '../services/storage';
 import { useToast } from '../contexts/ToastContext';
@@ -9,7 +9,7 @@ import { ChapterItem } from '../components/ChapterItem';
 import { 
   ArrowLeft, Star, Play, BookmarkCheck, BookmarkPlus, 
   Search, ArrowUpDown, ChevronDown, ChevronUp, Loader2, RefreshCw, X, Check, FolderPlus, BookOpen, Clock, Heart,
-  Share2, Layers, Grid, ChevronRight, Link
+  Share2, Layers, Grid, ChevronRight, Link, Zap, Radio
 } from 'lucide-react';
 import { TrackerModal } from '../components/TrackerModal';
 
@@ -19,25 +19,38 @@ import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 export const MangaDetailPage: React.FC = () => {
   const { mangaId } = useParams<{ mangaId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const locationState = location.state as { title?: string } | undefined;
   const { showToast } = useToast();
 
   const [manga, setManga] = useState<Manga | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isResolvingChapters, setIsResolvingChapters] = useState(false);
+  const [resolutionStatus, setResolutionStatus] = useState<string | null>(null);
+
   const [refreshing, setRefreshing] = useState(false);
   const [inLibrary, setInLibrary] = useState(false);
   const [currentCategory, setCurrentCategory] = useState<BookmarkItem['category'] | null>(null);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [showTrackerModal, setShowTrackerModal] = useState(false);
-  useBodyScrollLock(showCategoryModal || showTrackerModal);
+
+  // Change Source modal state
+  const [showSourceModal, setShowSourceModal] = useState(false);
+  const [sourceSearchLoading, setSourceSearchLoading] = useState(false);
+  const [sourceSearchResults, setSourceSearchResults] = useState<Manga[]>([]);
+
+  useBodyScrollLock(showCategoryModal || showTrackerModal || showSourceModal);
   const [expandDesc, setExpandDesc] = useState(false);
   const [aniListData, setAniListData] = useState<AniListMangaData | null>(null);
   const [chapterSearch, setChapterSearch] = useState('');
+  const [visibleChapterCount, setVisibleChapterCount] = useState(50);
   const [sortAsc, setSortAsc] = useState(false);
   const [viewByVolume, setViewByVolume] = useState(false);
   const [collapsedVolumes, setCollapsedVolumes] = useState<Record<string, boolean>>({});
   const [lastReadChapterId, setLastReadChapterId] = useState<string | number | null>(null);
   const [lastReadPage, setLastReadPage] = useState<number>(1);
   const [readChaptersSet, setReadChaptersSet] = useState<Set<string>>(new Set());
+
 
   useEffect(() => {
     if (mangaId) {
@@ -48,11 +61,98 @@ export const MangaDetailPage: React.FC = () => {
   const loadManga = async (id: string, force: boolean = false) => {
     setLoading(true);
     try {
-      let data = await getMangaDetails(id, force);
+      let targetId = id;
+
+      // Handle AniList item resolution to Suwayomi source manga
+      if (String(id).startsWith('anilist-')) {
+        const numericAniId = String(id).replace('anilist-', '');
+        const passedTitle = locationState?.title || '';
+        const titleCandidates: string[] = passedTitle ? [passedTitle] : [];
+
+        let aniMedia: any = null;
+        try {
+          const res = await fetch('https://graphql.anilist.co', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              query: `query ($id: Int) { Media(id: $id, type: MANGA) { id title { english romaji userPreferred native } synonyms description coverImage { extraLarge large } bannerImage averageScore status genres } }`,
+              variables: { id: parseInt(numericAniId, 10) }
+            })
+          });
+          const json = await res.json();
+          aniMedia = json?.data?.Media;
+        } catch {}
+
+        if (aniMedia) {
+          if (aniMedia.title?.english) titleCandidates.push(aniMedia.title.english);
+          if (aniMedia.title?.userPreferred) titleCandidates.push(aniMedia.title.userPreferred);
+          if (aniMedia.title?.romaji) titleCandidates.push(aniMedia.title.romaji);
+          if (aniMedia.synonyms && Array.isArray(aniMedia.synonyms)) {
+            titleCandidates.push(...aniMedia.synonyms);
+          }
+
+          const primaryTitle = aniMedia.title?.english || aniMedia.title?.userPreferred || aniMedia.title?.romaji || passedTitle || 'Manga';
+          const cleanDesc = aniMedia.description ? aniMedia.description.replace(/<br\s*[\/]?>/gi, '\n').replace(/<[^>]+>/g, '').trim() : '';
+
+          // Instant preview manga object to render page IMMEDIATELY (0ms delay)
+          const previewMangaObj: Manga = {
+            id: `anilist-${numericAniId}`,
+            title: primaryTitle,
+            thumbnailUrl: aniMedia.coverImage?.extraLarge || aniMedia.coverImage?.large,
+            description: cleanDesc,
+            rating: aniMedia.averageScore ? Number((aniMedia.averageScore / 10).toFixed(1)) : undefined,
+            status: aniMedia.status || 'ONGOING',
+            sourceId: 'anilist',
+            sourceName: 'AniList',
+            genre: aniMedia.genres || [],
+            chapters: [],
+          };
+
+          setManga(previewMangaObj);
+          setLoading(false); // Instant render!
+          setIsResolvingChapters(true);
+          setResolutionStatus('Searching active reading extensions...');
+
+          const resolvedSourceManga = await resolveMangaFromSourceByTitle(
+            titleCandidates[0] || primaryTitle,
+            titleCandidates.slice(1),
+            (statusMsg) => setResolutionStatus(statusMsg)
+          );
+
+          if (resolvedSourceManga && resolvedSourceManga.id) {
+            targetId = String(resolvedSourceManga.id);
+            window.history.replaceState(null, '', `/manga/${targetId}`);
+
+            const merged: Manga = {
+              ...resolvedSourceManga,
+              thumbnailUrl: resolvedSourceManga.thumbnailUrl || previewMangaObj.thumbnailUrl,
+              rating: resolvedSourceManga.rating || previewMangaObj.rating,
+            };
+
+            setManga(merged);
+            setReadChaptersSet(getReadChapters());
+
+            const bookmarked = isBookmarked(merged.id);
+            setInLibrary(merged.inLibrary || bookmarked);
+            setCurrentCategory(getBookmarkCategory(merged.id));
+
+            fetchAniListRating(merged.title).then(res => setAniListData(res));
+            autoBindTrackers(merged.id, merged.title).catch(() => {});
+            setIsResolvingChapters(false);
+            return;
+          } else {
+            setIsResolvingChapters(false);
+            showToast('No active source scraper has chapters for this title yet.', 'warning');
+            return;
+          }
+        }
+      }
+
+      let data = await getMangaDetails(targetId, force);
 
       // If chapters are missing, auto-trigger a fresh fetch from source
       if (!data || !data.chapters || data.chapters.length === 0) {
-        data = await getMangaDetails(id, true);
+        data = await getMangaDetails(targetId, true);
       }
 
       setManga(data);
@@ -78,6 +178,22 @@ export const MangaDetailPage: React.FC = () => {
       console.error(e);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenChangeSource = async () => {
+    if (!manga) return;
+    setShowSourceModal(true);
+    setSourceSearchLoading(true);
+    try {
+      const allSources = await getSources(true, true);
+      const activeIds = allSources.map((s: Source) => s.id);
+      const res = await searchMultiSource(activeIds, manga.title, 1, true);
+      setSourceSearchResults(res.mangas || []);
+    } catch (err) {
+      console.error('Source search error:', err);
+    } finally {
+      setSourceSearchLoading(false);
     }
   };
 
@@ -161,7 +277,7 @@ export const MangaDetailPage: React.FC = () => {
   if (!manga) {
     return (
       <main className="min-h-screen flex flex-col items-center justify-center p-6 text-center space-y-4">
-        <h2 className="font-display font-extrabold text-xl text-white">Manga Not Found</h2>
+        <h2 className="font-display font-extrabold text-xl text-[#0c0c14]">Manga Not Found</h2>
         <p className="font-sans text-xs text-slate-400">Unable to load details for this manga from the API.</p>
         <button
           onClick={() => navigate(-1)}
@@ -250,6 +366,7 @@ export const MangaDetailPage: React.FC = () => {
           <img
             src={manga.thumbnailUrl}
             alt={manga.title}
+            decoding="async"
             className="w-full h-full object-cover scale-110 blur-2xl transform"
           />
           <div className="absolute inset-0 bg-gradient-to-b from-[#0c0c14]/30 via-[#0c0c14]/80 to-[#0c0c14]" />
@@ -281,10 +398,13 @@ export const MangaDetailPage: React.FC = () => {
               <img
                 src={manga.thumbnailUrl}
                 alt={manga.title}
+                fetchPriority="high"
+                decoding="async"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-gradient-to-t from-[#0c0c14]/80 via-transparent to-transparent" />
             </div>
+
 
             {/* Title & Metadata */}
             <div className="flex flex-col min-w-0 justify-between gap-2 flex-1">
@@ -309,7 +429,8 @@ export const MangaDetailPage: React.FC = () => {
 
               {/* Rating & Stats */}
               <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <div className="flex items-center gap-1.5 bg-[#231f3d] px-3 py-1 rounded-lg border border-white/5">
+                {/* AniList / Rating Pill */}
+                <div className="flex items-center gap-1.5 bg-[#231f3d] px-3 py-1 rounded-xl border border-white/10 shadow-sm">
                   <Star className="w-4 h-4 text-amber-400 fill-current" />
                   <span className="font-sans text-xs font-bold text-white">
                     {aniListData?.averageScore 
@@ -323,22 +444,33 @@ export const MangaDetailPage: React.FC = () => {
                   ) : null}
                 </div>
 
+                {/* AniList Score Link */}
                 {aniListData?.siteUrl && (
                   <a
                     href={aniListData.siteUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#02a9ff]/15 text-[#02a9ff] hover:bg-[#02a9ff]/25 border border-[#02a9ff]/30 text-[11px] font-bold transition-all"
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-[#02a9ff]/15 text-[#02a9ff] hover:bg-[#02a9ff]/25 border border-[#02a9ff]/30 text-[11px] font-bold transition-all"
                   >
                     <span>AniList Score</span>
                   </a>
                 )}
 
-                {sourceRating && aniListData?.averageScore && (
-                  <span className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#9d86e9]/15 text-[#9d86e9] border border-[#9d86e9]/30 text-[11px] font-bold">
-                    <span>Source Score: {sourceRating}</span>
-                  </span>
-                )}
+                {/* Single Source Badge + Change Source Interactive Pill */}
+                <div className="flex items-center gap-2 px-3 py-1 rounded-xl bg-[#1c1833] border border-[#2b2746] text-xs font-bold shadow-md">
+                  <div className="flex items-center gap-1.5 text-blue-400">
+                    <Radio className="w-3.5 h-3.5 shrink-0" />
+                    <span className="text-white font-bold">{getSourceName(manga.sourceId, manga.sourceName)}</span>
+                  </div>
+                  <button
+                    onClick={handleOpenChangeSource}
+                    className="ml-1 px-2.5 py-0.5 rounded-lg bg-gradient-to-r from-[#9d86e9] to-[#7c5cdb] hover:from-[#b19cf5] text-black text-[11px] font-extrabold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
+                    title="Switch to another extension source"
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span>Change Source</span>
+                  </button>
+                </div>
               </div>
 
               {/* Reading Progress Bar */}
@@ -480,8 +612,19 @@ export const MangaDetailPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Chapter Items Display */}
-          {filteredChapters.length === 0 ? (
+          {/* Live Scraper Progress Card during AniList Resolution */}
+          {isResolvingChapters ? (
+            <div className="p-5 rounded-2xl bg-[#161327] border border-[#9d86e9]/40 shadow-xl flex items-center gap-4 animate-fade-in my-2">
+              <div className="relative flex items-center justify-center shrink-0">
+                <Loader2 className="w-7 h-7 text-[#9d86e9] animate-spin" />
+                <Zap className="w-3.5 h-3.5 text-[#9d86e9] absolute" />
+              </div>
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs font-extrabold text-white tracking-wide">{resolutionStatus || 'Scraping active sources for chapters...'}</span>
+                <span className="text-[11px] text-[#7c779b] font-medium mt-0.5">Searching MangaDex, Asura Scans, Flame Comics, ComicK & active extensions...</span>
+              </div>
+            </div>
+          ) : filteredChapters.length === 0 ? (
             <div className="py-12 flex flex-col items-center justify-center text-center text-slate-400 font-sans text-xs bg-[#161327] rounded-2xl border border-[#2b2746] space-y-3">
               <p>No chapters indexed yet for this title.</p>
               <button
@@ -495,14 +638,126 @@ export const MangaDetailPage: React.FC = () => {
             </div>
           ) : (
             /* Clean Flat List View */
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {filteredChapters.map(chapter => (
-                <ChapterItem key={chapter.id} chapter={chapter} />
-              ))}
+            <div className="flex flex-col gap-3">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {(chapterSearch.trim() ? filteredChapters : filteredChapters.slice(0, visibleChapterCount)).map(chapter => (
+                  <ChapterItem key={chapter.id} chapter={chapter} />
+                ))}
+              </div>
+              {!chapterSearch.trim() && visibleChapterCount < filteredChapters.length && (
+                <button
+                  onClick={() => setVisibleChapterCount(prev => prev + 50)}
+                  className="w-full py-3 rounded-xl bg-[#1c1833] hover:bg-[#25213b] text-[#9d86e9] font-bold text-xs border border-[#2b2746] hover:border-[#9d86e9]/40 transition-all cursor-pointer shadow-md"
+                >
+                  Show More Chapters ({filteredChapters.length - visibleChapterCount} remaining)
+                </button>
+              )}
             </div>
           )}
+
         </section>
       </div>
+
+      {/* Change Source Picker Modal */}
+      {showSourceModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4 animate-fade-in"
+          onClick={() => setShowSourceModal(false)}
+        >
+          <div
+            className="w-full max-w-lg bg-[#161327] border border-[#2b2746] rounded-2xl flex flex-col shadow-2xl overflow-hidden max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-[#2b2746] flex items-center justify-between bg-[#120f23]">
+              <div className="flex items-center gap-2">
+                <Radio className="w-5 h-5 text-[#9d86e9]" />
+                <h3 className="font-display font-bold text-base text-white">
+                  Change Manga Source
+                </h3>
+              </div>
+              <button
+                onClick={() => setShowSourceModal(false)}
+                className="p-1 rounded-lg hover:bg-white/10 text-[#7c779b] hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 flex-1 min-h-0 overflow-y-auto space-y-3 scrollbar-thin">
+              <p className="text-xs text-[#7c779b]">
+                Select an alternative extension source to read <strong className="text-white">{manga.title}</strong>:
+              </p>
+
+              {sourceSearchLoading ? (
+                <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
+                  <Loader2 className="w-6 h-6 animate-spin text-[#9d86e9]" />
+                  <span className="text-xs font-semibold">Searching active extensions...</span>
+                </div>
+              ) : sourceSearchResults.length === 0 ? (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  No alternative source results found for this title.
+                </div>
+              ) : (
+                <div className="space-y-2.5">
+                  {sourceSearchResults.map((item) => {
+                    const isCurrent = String(item.id) === String(manga.id);
+                    const thumbUrl = getImageUrl(item.thumbnailUrl) || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200&q=80';
+                    return (
+                      <div
+                        key={item.id}
+                        onClick={() => {
+                          if (!isCurrent) {
+                            setShowSourceModal(false);
+                            navigate(`/manga/${item.id}`);
+                            showToast(`Switched source to ${item.sourceName}!`, 'success');
+                          }
+                        }}
+                        className={`p-3.5 rounded-2xl border flex items-center justify-between gap-3.5 transition-all cursor-pointer ${
+                          isCurrent
+                            ? 'bg-[#9d86e9]/15 border-[#9d86e9] text-white shadow-lg shadow-[#9d86e9]/10'
+                            : 'bg-[#1c1833] border-[#2b2746] hover:bg-[#231f3d] hover:border-[#9d86e9]/40 text-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <img
+                            src={thumbUrl}
+                            alt={item.title}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200&q=80';
+                            }}
+                            className="w-12 h-16 rounded-xl object-cover bg-[#0c0c14] border border-[#2b2746] shrink-0 shadow-md"
+                          />
+                          <div className="flex flex-col min-w-0 flex-1 justify-center space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-xs text-[#9d86e9]">{item.sourceName}</span>
+                              <span className="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-[#9d86e9]/20 text-[#9d86e9] border border-[#9d86e9]/30">
+                                {item.lang ? item.lang.toUpperCase() : 'EN'}
+                              </span>
+                            </div>
+                            <h4 className="text-xs font-bold text-white line-clamp-2 leading-snug break-words">
+                              {item.title}
+                            </h4>
+                          </div>
+                        </div>
+
+                        {isCurrent ? (
+                          <span className="px-3 py-1.5 rounded-xl bg-[#9d86e9] text-black font-extrabold text-[10px] uppercase tracking-wider shrink-0 shadow-md">
+                            Active
+                          </span>
+                        ) : (
+                          <button className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-[#9d86e9] to-[#7c5cdb] hover:from-[#b19cf5] text-black font-extrabold text-xs shrink-0 cursor-pointer shadow-md active:scale-95">
+                            Switch
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Category Picker Modal */}
       {showCategoryModal && (

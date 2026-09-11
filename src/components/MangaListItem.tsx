@@ -12,7 +12,7 @@ interface MangaListItemProps {
   onInfoClick?: (e: React.MouseEvent) => void;
 }
 
-export const MangaListItem: React.FC<MangaListItemProps> = ({
+export const MangaListItem: React.FC<MangaListItemProps> = React.memo(({
   manga,
   latestChapter,
   updatedTime,
@@ -59,6 +59,7 @@ export const MangaListItem: React.FC<MangaListItemProps> = ({
           src={getImageUrl(manga.thumbnailUrl) || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200&q=80'}
           alt={manga.title}
           loading="lazy"
+          decoding="async"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
           onError={(e) => {
             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=200&q=80';
@@ -113,4 +114,5 @@ export const MangaListItem: React.FC<MangaListItemProps> = ({
       </div>
     </div>
   );
-};
+});
+

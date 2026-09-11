@@ -12,7 +12,7 @@ interface MangaCardProps {
   onInfoClick?: (manga: Manga, e: React.MouseEvent) => void;
 }
 
-export const MangaCard: React.FC<MangaCardProps> = ({ manga, rankBadge, progressPercent, onInfoClick }) => {
+export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadge, progressPercent, onInfoClick }) => {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -50,6 +50,8 @@ export const MangaCard: React.FC<MangaCardProps> = ({ manga, rankBadge, progress
           src={getImageUrl(manga.thumbnailUrl) || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&q=80'}
           alt={manga.title}
           loading="lazy"
+          decoding="async"
+          sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           onError={(e) => {
             (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&q=80';
@@ -132,4 +134,5 @@ export const MangaCard: React.FC<MangaCardProps> = ({ manga, rankBadge, progress
       </div>
     </div>
   );
-};
+});
+

@@ -102,3 +102,6 @@ export const UpdatesPage: React.FC = () => {
     </main>
   );
 };
+
+export default UpdatesPage;
+

@@ -1,21 +1,27 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Manga } from '../types/manga';
 import { searchMultiSource, getSources, filterMangaByContentRating } from '../services/suwayomiApi';
+import { searchAniList } from '../services/anilistApi';
 import { getEnabledSourceIds, isSourceEnabled, getRecentSearches, addRecentSearch, removeRecentSearch, clearRecentSearches } from '../services/storage';
 import { useToast } from '../contexts/ToastContext';
 import { MangaCard } from '../components/MangaCard';
 import { MangaListItem } from '../components/MangaListItem';
 import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaInfoModal } from '../components/MangaInfoModal';
-import { Search, SlidersHorizontal, Bookmark, Dices, List, LayoutGrid, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Shuffle, Sparkles } from 'lucide-react';
+import { Search, SlidersHorizontal, Bookmark, Dices, List, LayoutGrid, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, X, Shuffle, Sparkles, Zap, Globe, Loader2 } from 'lucide-react';
 
 export const SearchBrowsePage: React.FC = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlQuery = searchParams.get('q') || '';
   const { showToast } = useToast();
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(urlQuery);
   const [mangaList, setMangaList] = useState<Manga[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Search Engine Provider: 'anilist' (instant ~150ms) vs 'suwayomi' (direct scraper)
+  const [searchEngine, setSearchEngine] = useState<'anilist' | 'suwayomi'>('anilist');
 
   // Quick Info Preview State
   const [previewManga, setPreviewManga] = useState<Manga | null>(null);
@@ -29,7 +35,7 @@ export const SearchBrowsePage: React.FC = () => {
 
   // Search Controls State
   const [searchMode, setSearchMode] = useState<'fuzzy' | 'exact'>('fuzzy');
-  const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [sortOption, setSortOption] = useState('Relevance');
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -38,9 +44,9 @@ export const SearchBrowsePage: React.FC = () => {
   const [recentSearches, setRecentSearches] = useState<string[]>(getRecentSearches());
 
   useEffect(() => {
-    loadAndSearch('', 1);
+    loadAndSearch(urlQuery, 1);
 
-    getSources().then(sources => {
+    getSources(true, true).then(sources => {
       if (sources && sources.length > 0) {
         const listToUse = sources.filter(s => isSourceEnabled(s.id, s.name));
 
@@ -69,39 +75,108 @@ export const SearchBrowsePage: React.FC = () => {
   useEffect(() => {
     const timer = setTimeout(() => {
       loadAndSearch(query, 1, false);
-    }, 300);
+    }, searchEngine === 'anilist' ? 150 : 300);
     return () => clearTimeout(timer);
-  }, [query, selectedSourceId]);
+  }, [query, selectedSourceId, searchEngine]);
+
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   const loadAndSearch = async (
     searchQuery: string = query,
     page: number = 1,
     forceRefresh: boolean = false,
-    sourceIdOverride?: string
+    sourceIdOverride?: string,
+    engineOverride?: 'anilist' | 'suwayomi',
+    append: boolean = false
   ) => {
-    setLoading(true);
+    const activeEngine = engineOverride !== undefined ? engineOverride : searchEngine;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
     setCurrentPage(page);
     try {
-      const activeSource = sourceIdOverride !== undefined ? sourceIdOverride : selectedSourceId;
-      let targetSourceIds: string[] = [];
-      if (activeSource !== 'all') {
-        targetSourceIds = [activeSource];
+      let newMangas: Manga[] = [];
+      if (activeEngine === 'anilist') {
+        const res = await searchAniList(searchQuery, page, 24);
+        if ((!res.mangas || res.mangas.length === 0) && searchQuery.trim().length > 0 && page === 1) {
+          const targetSourceIds = getEnabledSourceIds(availableSources.map(s => s.id));
+          const fallbackRes = await searchMultiSource(targetSourceIds, searchQuery, page, forceRefresh);
+          newMangas = fallbackRes.mangas || [];
+        } else {
+          newMangas = res.mangas || [];
+        }
       } else {
-        targetSourceIds = getEnabledSourceIds(availableSources.map(s => s.id));
+        const activeSource = sourceIdOverride !== undefined ? sourceIdOverride : selectedSourceId;
+        let targetSourceIds: string[] = [];
+        if (activeSource !== 'all') {
+          targetSourceIds = [activeSource];
+        } else {
+          targetSourceIds = getEnabledSourceIds(availableSources.map(s => s.id));
+        }
+
+        const res = await searchMultiSource(targetSourceIds, searchQuery, page, forceRefresh);
+        newMangas = res.mangas || [];
       }
 
-      const res = await searchMultiSource(targetSourceIds, searchQuery, page, forceRefresh);
-      setMangaList(res.mangas || []);
-      if (page > 1) {
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (newMangas.length === 0) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
+
+      if (append) {
+        setMangaList(prev => {
+          const existingIds = new Set(prev.map(m => String(m.id)));
+          const filteredNew = newMangas.filter(m => !existingIds.has(String(m.id)));
+          return [...prev, ...filteredNew];
+        });
+      } else {
+        setMangaList(newMangas);
+        if (page > 1) {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
       }
     } catch (e) {
       console.error(e);
-      setMangaList([]);
+      if (!append) setMangaList([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   };
+
+  const loadNextPage = () => {
+    if (loading || loadingMore || !hasMore) return;
+    loadAndSearch(query, currentPage + 1, false, undefined, undefined, true);
+  };
+
+  // Infinite Scroll Trigger Observer Effect
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loadingMore && !loading && mangaList.length > 0) {
+          loadNextPage();
+        }
+      },
+      { threshold: 0.1, rootMargin: '400px' }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, loadingMore, loading, currentPage, mangaList.length, query, searchEngine, selectedSourceId]);
 
   const handleRandomManga = () => {
     const list = filterMangaByContentRating(mangaList);
@@ -109,7 +184,7 @@ export const SearchBrowsePage: React.FC = () => {
       const randomIdx = Math.floor(Math.random() * list.length);
       const chosen = list[randomIdx];
       showToast(`Opening random title: "${chosen.title}"`, 'info');
-      navigate(`/manga/${chosen.id}`);
+      navigate(`/manga/${chosen.id}`, { state: { title: chosen.title } });
     } else {
       const randomPage = Math.floor(Math.random() * 5) + 1;
       showToast(`Loading random catalog page ${randomPage}`, 'info');
@@ -239,33 +314,81 @@ export const SearchBrowsePage: React.FC = () => {
           </div>
         )}
 
-        {/* Source Selector Bar */}
-        <div className="flex items-center gap-2 mt-2.5 overflow-x-auto no-scrollbar py-1">
-          <span className="text-xs text-[#7c779b] font-bold shrink-0">Source:</span>
-          {[
-            { id: 'all', name: 'All Sources' },
-            ...availableSources
-          ].map((src) => (
+        {/* Search Engine Mode Selector */}
+        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#2b2746]/60">
+          <div className="flex items-center gap-1 bg-[#1c1833] p-1 rounded-xl border border-[#2b2746]">
             <button
-              key={src.id}
               type="button"
               onClick={() => {
-                if (selectedSourceId !== src.id) {
-                  setSelectedSourceId(src.id);
-                  setMangaList([]);
-                  loadAndSearch(query, 1, true, src.id);
+                if (searchEngine !== 'anilist') {
+                  setSearchEngine('anilist');
+                  loadAndSearch(query, 1, false, undefined, 'anilist');
                 }
               }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                selectedSourceId === src.id
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                searchEngine === 'anilist'
                   ? 'bg-[#9d86e9] text-[#0c0c14] shadow-sm'
-                  : 'bg-[#161327] text-[#9e9ab8] hover:text-white border border-[#2b2746]'
+                  : 'text-[#7c779b] hover:text-white'
               }`}
             >
-              {src.name}
+              <Zap className="w-3.5 h-3.5" />
+              <span>AniList</span>
             </button>
-          ))}
+            <button
+              type="button"
+              onClick={() => {
+                if (searchEngine !== 'suwayomi') {
+                  setSearchEngine('suwayomi');
+                  loadAndSearch(query, 1, false, undefined, 'suwayomi');
+                }
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                searchEngine === 'suwayomi'
+                  ? 'bg-[#9d86e9] text-[#0c0c14] shadow-md'
+                  : 'text-[#7c779b] hover:text-white'
+              }`}
+            >
+              <Globe className="w-3.5 h-3.5" />
+              <span>Direct</span>
+            </button>
+          </div>
+
+          <span className="text-[10px] text-[#7c779b] font-medium">
+            {searchEngine === 'anilist'
+              ? '⚡ Ultra-fast search (~150ms)'
+              : '🌐 Live source scraping'}
+          </span>
         </div>
+
+        {/* Source Selector Bar (shown when Direct Scraping is selected) */}
+        {searchEngine === 'suwayomi' && (
+          <div className="flex items-center gap-2 mt-2 overflow-x-auto no-scrollbar py-1 animate-fade-in">
+            <span className="text-xs text-[#7c779b] font-bold shrink-0">Source:</span>
+            {[
+              { id: 'all', name: 'All Sources' },
+              ...availableSources
+            ].map((src) => (
+              <button
+                key={src.id}
+                type="button"
+                onClick={() => {
+                  if (selectedSourceId !== src.id) {
+                    setSelectedSourceId(src.id);
+                    setMangaList([]);
+                    loadAndSearch(query, 1, true, src.id);
+                  }
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                  selectedSourceId === src.id
+                    ? 'bg-[#9d86e9] text-[#0c0c14] shadow-sm'
+                    : 'bg-[#161327] text-[#9e9ab8] hover:text-white border border-[#2b2746]'
+                }`}
+              >
+                {src.name}
+              </button>
+            ))}
+          </div>
+        )}
       </section>
 
       {/* 2. Controls Row (Sort, Fuzzy/Exact, View Mode, Dice, Results Count) */}
@@ -349,60 +472,6 @@ export const SearchBrowsePage: React.FC = () => {
         </span>
       </section>
 
-      {/* 3. Real Pagination Bar */}
-      <section className="flex items-center justify-center gap-1.5 py-2">
-        <button
-          onClick={() => loadAndSearch(query, 1, false)}
-          disabled={currentPage === 1 || loading}
-          className="p-2 rounded-xl bg-[#161327] text-[#7c779b] hover:text-white disabled:opacity-40 border border-[#2b2746] transition-colors"
-          title="First Page"
-        >
-          <ChevronsLeft className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={() => loadAndSearch(query, Math.max(1, currentPage - 1), false)}
-          disabled={currentPage === 1 || loading}
-          className="p-2 rounded-xl bg-[#161327] text-[#7c779b] hover:text-white disabled:opacity-40 border border-[#2b2746] transition-colors"
-          title="Previous Page"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-
-        {getPageStrip().map((pNum) => (
-          <button
-            key={pNum}
-            onClick={() => loadAndSearch(query, pNum, false)}
-            disabled={loading}
-            className={`w-9 h-9 rounded-xl font-bold text-xs transition-all ${
-              currentPage === pNum
-                ? 'bg-[#9d86e9] text-[#0c0c14] shadow-md scale-105'
-                : 'bg-[#161327] text-white hover:bg-[#231f3d] border border-[#2b2746]'
-            }`}
-          >
-            {pNum}
-          </button>
-        ))}
-
-        <button
-          onClick={() => loadAndSearch(query, currentPage + 1, false)}
-          disabled={loading}
-          className="p-2 rounded-xl bg-[#161327] text-[#7c779b] hover:text-white disabled:opacity-40 border border-[#2b2746] transition-colors"
-          title="Next Page"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
-
-        <button
-          onClick={() => loadAndSearch(query, currentPage + 5, false)}
-          disabled={loading}
-          className="p-2 rounded-xl bg-[#161327] text-[#7c779b] hover:text-white disabled:opacity-40 border border-[#2b2746] transition-colors"
-          title="Jump +5 Pages"
-        >
-          <ChevronsRight className="w-4 h-4" />
-        </button>
-      </section>
-
       {/* 4. Results List / Grid */}
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -416,34 +485,52 @@ export const SearchBrowsePage: React.FC = () => {
           <p className="font-sans text-base font-semibold text-white">No titles found</p>
           <p className="font-sans text-xs text-[#7c779b]">Try searching for another title or keyword.</p>
         </div>
-      ) : viewMode === 'list' ? (
-        <div className="flex flex-col gap-3">
-          {filteredMangaList.map((manga, idx) => {
-            const rawUploadDate = manga.chapters?.[0]?.uploadDate;
-            const timestamp = rawUploadDate
-              ? (Number(rawUploadDate) || new Date(rawUploadDate).getTime())
-              : (Date.now() - ((idx + 1) * 2 * 3600 * 1000));
-            return (
-              <MangaListItem
-                key={`${manga.sourceId}-${manga.id}-${idx}`}
-                manga={manga}
-                latestChapter={manga.chapters?.[0]?.name || (idx === 0 ? 'Ch. 2' : idx === 1 ? 'Ch. 41' : 'Vol. 3')}
-                updatedTime={formatTimeAgo(timestamp)}
-                onInfoClick={(e) => handleOpenPreview(manga, e)}
-              />
-            );
-          })}
-        </div>
       ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
-          {filteredMangaList.map((manga) => (
-            <MangaCard
-              key={`${manga.sourceId}-${manga.id}`}
-              manga={manga}
-              onInfoClick={(m, e) => handleOpenPreview(m, e)}
-            />
-          ))}
-        </div>
+        <>
+          {viewMode === 'list' ? (
+            <div className="flex flex-col gap-3">
+              {filteredMangaList.map((manga, idx) => {
+                const rawUploadDate = manga.chapters?.[0]?.uploadDate;
+                const timestamp = rawUploadDate
+                  ? (Number(rawUploadDate) || new Date(rawUploadDate).getTime())
+                  : (Date.now() - ((idx + 1) * 2 * 3600 * 1000));
+                return (
+                  <MangaListItem
+                    key={`${manga.sourceId}-${manga.id}-${idx}`}
+                    manga={manga}
+                    latestChapter={manga.chapters?.[0]?.name || (idx === 0 ? 'Ch. 2' : idx === 1 ? 'Ch. 41' : 'Vol. 3')}
+                    updatedTime={formatTimeAgo(timestamp)}
+                    onInfoClick={(e) => handleOpenPreview(manga, e)}
+                  />
+                );
+              })}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 sm:gap-6">
+              {filteredMangaList.map((manga) => (
+                <MangaCard
+                  key={`${manga.sourceId}-${manga.id}`}
+                  manga={manga}
+                  onInfoClick={(m, e) => handleOpenPreview(m, e)}
+                />
+              ))}
+            </div>
+          )}
+
+          {/* Lazy Loading Spinner & Sentinel Target */}
+          <div ref={observerTarget} className="py-6 flex items-center justify-center min-h-[60px]">
+            {loadingMore ? (
+              <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-[#161327] border border-[#2b2746] text-xs font-semibold text-[#9d86e9]">
+                <Loader2 className="w-4 h-4 animate-spin text-[#9d86e9]" />
+                <span>Loading more titles...</span>
+              </div>
+            ) : hasMore ? (
+              <span className="text-[11px] text-[#7c779b]">Scroll for more titles</span>
+            ) : (
+              <span className="text-[11px] text-[#7c779b]">End of results</span>
+            )}
+          </div>
+        </>
       )}
 
       {/* Quick Info Modal */}
@@ -493,3 +580,6 @@ function getDemoSearchResults(): Manga[] {
     },
   ];
 }
+
+export default SearchBrowsePage;
+

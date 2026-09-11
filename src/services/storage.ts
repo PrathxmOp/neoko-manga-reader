@@ -1,4 +1,5 @@
 import { BookmarkItem, HistoryItem, Manga, ReaderSettings, ContentFilterSettings, AppSettings, UserProfile, ReadingStats, MangaCollection, ChapterNote } from '../types/manga';
+import { isDefault18Plus } from '../config/extensionRules';
 
 const BOOKMARKS_KEY = 'neoko_manga_bookmarks';
 const HISTORY_KEY = 'neoko_manga_history';
@@ -187,10 +188,15 @@ export function getReadChapters(): Set<string> {
   }
 }
 
-export function markChapterRead(chapterId: string | number) {
+export function markChapterRead(chapterId: string | number, genres: string[] = []) {
   const set = getReadChapters();
-  set.add(String(chapterId));
+  const idStr = String(chapterId);
+  const wasAlreadyRead = set.has(idStr);
+  set.add(idStr);
   localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  if (!wasAlreadyRead) {
+    updateReadingStats(1, 3, genres);
+  }
 }
 
 export function markChapterUnread(chapterId: string | number) {
@@ -199,15 +205,20 @@ export function markChapterUnread(chapterId: string | number) {
   localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
 }
 
-export function toggleChapterRead(chapterId: string | number): boolean {
+export function toggleChapterRead(chapterId: string | number, genres: string[] = []): boolean {
   const set = getReadChapters();
   const idStr = String(chapterId);
+  let isNowRead = false;
   if (set.has(idStr)) {
     set.delete(idStr);
   } else {
     set.add(idStr);
+    isNowRead = true;
   }
   localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  if (isNowRead) {
+    updateReadingStats(1, 3, genres);
+  }
   return set.has(idStr);
 }
 
@@ -264,10 +275,7 @@ export function isSourceEnabled(sourceId?: string | number, sourceName?: string)
   }
   if (sourceName) {
     const sNameLower = sourceName.toLowerCase().trim();
-    const isNameDisabled = disabled.some(d => {
-      const dLower = d.toLowerCase().trim();
-      return dLower === sNameLower || sNameLower.includes(dLower) || dLower.includes(sNameLower);
-    });
+    const isNameDisabled = disabled.some(d => d.toLowerCase().trim() === sNameLower);
     if (isNameDisabled) return false;
   }
   return true;
@@ -365,6 +373,9 @@ export function getExtensionMode(sourceIdOrName: string | number, isNsfwDefault:
   if (modes[key]) return modes[key];
   const matchedKey = Object.keys(modes).find(k => k.toLowerCase() === lowerKey);
   if (matchedKey && modes[matchedKey]) return modes[matchedKey];
+
+  // Check centralized default rules
+  if (isDefault18Plus(key)) return '18+';
 
   // Default assignment: if porno/erotica/nsfw -> '18+', else -> 'normal'
   return isNsfwDefault ? '18+' : 'normal';
