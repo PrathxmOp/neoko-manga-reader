@@ -1220,7 +1220,7 @@ export const SettingsPage: React.FC = () => {
                 <div className="p-5 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-3 shadow-xl">
                   <div className="flex items-center gap-3">
                     <img
-                      src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&q=80"
+                      src="https://github.com/PrathxmOp.png"
                       alt="Prathxm"
                       className="w-12 h-12 rounded-2xl object-cover border-2 border-[#9d86e9]"
                     />
@@ -1236,7 +1236,7 @@ export const SettingsPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-slate-300 leading-relaxed border-t border-[#2b2746] pt-3">
-                    Hey! I'm <strong>Prathxm</strong>. I built <strong>NEOKO</strong> for the cleanest manga experience. Currently, NEOKO is hosted locally on my personal laptop (which is why it may feel a bit slow at times). I am raising funds to move it to a 24/7 dedicated high-speed cloud server!
+                    Hey! I'm <strong>Prathxm</strong>. I built <strong>NEOKO</strong> to deliver a fast, modern, and ad-free manga reading experience.
                   </p>
                 </div>
 
