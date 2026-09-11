@@ -23,8 +23,8 @@ export async function fetchAuthenticatedImageBlob(imageUrl: string): Promise<str
   if (!imageUrl) return null;
   try {
     const headers: Record<string, string> = {};
-    const authUser = import.meta.env.VITE_SUWAYOMI_AUTH_USER || 'Prathxm';
-    const authPass = import.meta.env.VITE_SUWAYOMI_AUTH_PASS || 'REDACTED_PASSWORD';
+    const authUser = import.meta.env.VITE_SUWAYOMI_AUTH_USER;
+    const authPass = import.meta.env.VITE_SUWAYOMI_AUTH_PASS;
     if (authUser && authPass) {
       headers['Authorization'] = `Basic ${btoa(`${authUser}:${authPass}`)}`;
     }
@@ -54,8 +54,8 @@ export async function queryGraphQL(query: string, variables: Record<string, any>
     };
 
     // Attach basic auth header if configured in environment variables
-    const authUser = import.meta.env.VITE_SUWAYOMI_AUTH_USER || 'Prathxm';
-    const authPass = import.meta.env.VITE_SUWAYOMI_AUTH_PASS || 'REDACTED_PASSWORD';
+    const authUser = import.meta.env.VITE_SUWAYOMI_AUTH_USER;
+    const authPass = import.meta.env.VITE_SUWAYOMI_AUTH_PASS;
     if (authUser && authPass) {
       headers['Authorization'] = `Basic ${btoa(`${authUser}:${authPass}`)}`;
     }
@@ -469,7 +469,7 @@ export async function searchMultiSource(
     try {
       const allSources = await getSources(false);
       const userLangs = (settings.languages && settings.languages.length > 0) ? settings.languages : ['en'];
-      
+
       const langSources = allSources.filter(s => {
         if (!isSourceEnabled(s.id, s.name)) return false;
         if (userLangs.includes('all')) return true;
@@ -1125,7 +1125,7 @@ export function getFallbackManga(mangaId: string | number): Manga | null {
         }
       }
     }
-  } catch {}
+  } catch { }
 
   return null;
 }
@@ -1154,7 +1154,7 @@ export async function getChapterPages(chapterId: number | string, forceRefresh: 
   try {
     let res = await queryGraphQL(mutation, { chapterId: numericId });
     let pages: string[] = res?.data?.fetchChapterPages?.pages || [];
-    
+
     // Retry up to 2 times if pages return empty on initial request (extension live scraping)
     if (pages.length === 0) {
       for (let attempt = 1; attempt <= 2; attempt++) {
@@ -1166,7 +1166,7 @@ export async function getChapterPages(chapterId: number | string, forceRefresh: 
     }
 
     const formattedPages = pages.map(p => getImageUrl(p)).filter(Boolean);
-    
+
     if (formattedPages.length > 0) {
       setCachedData(cacheKey, formattedPages, 60);
       return formattedPages;

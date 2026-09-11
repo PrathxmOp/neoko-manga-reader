@@ -5,7 +5,7 @@ services:
     ports:
       - "127.0.0.1:4567:4567"
     volumes:
-      - ./suwayomi-data:/home/suwayomi/.local/share/Tachidesk
+      - ./suwayomi-data:/home/suwayomi/.local/share/Tachidesk:z
     environment:
       - TZ=Asia/Kolkata
       - SUWAYOMI_SERVER_BASIC_AUTH_ENABLED=true
