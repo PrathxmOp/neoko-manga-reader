@@ -24,13 +24,25 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
   const [loading, setLoading] = useState(false);
   const [aniListData, setAniListData] = useState<AniListMangaData | null>(null);
 
+  const [isClosing, setIsClosing] = useState(false);
+
+  const handleClose = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      onClose();
+    }, 220);
+  };
+
   const { ref: dismissRef, offsetY, isDragging } = useSwipeDismiss<HTMLDivElement>({
-    onDismiss: onClose,
-    enabled: isOpen,
+    onDismiss: handleClose,
+    enabled: isOpen && !isClosing,
   });
 
   useEffect(() => {
     if (!manga || !isOpen) return;
+    setIsClosing(false);
 
     setDetails(manga);
     fetchAniListRating(manga.title).then(res => setAniListData(res));
@@ -81,7 +93,7 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
 
   const handleReadNow = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onClose();
+    handleClose();
     if (currentManga.chapters && currentManga.chapters.length > 0) {
       const sorted = [...currentManga.chapters].sort((a, b) => {
         const numA = parseFloat(String(a.chapterNumber || '0'));
@@ -97,7 +109,7 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
 
   const handleViewDetails = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onClose();
+    handleClose();
     navigate(`/manga/${currentManga.id}`);
   };
 
@@ -116,26 +128,30 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
     : (currentManga.chapterCount ? `${currentManga.chapterCount} ch` : 'Chapters available');
 
   return (
-    <div className="fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 pb-[64px] sm:pb-0 bg-black/80 backdrop-blur-md animate-fade-in">
+    <div className={`fixed inset-0 z-[75] flex items-end sm:items-center justify-center p-0 sm:p-4 pb-[64px] sm:pb-0 bg-black/80 backdrop-blur-md transition-opacity duration-200 ${
+      isClosing ? 'opacity-0' : 'animate-fade-in'
+    }`}>
       {/* Modal Backdrop Click */}
-      <div className="absolute inset-0" onClick={onClose} />
+      <div className="absolute inset-0" onClick={handleClose} />
 
       {/* Modal Container Sheet */}
       <div 
         ref={dismissRef}
         style={{
-          transform: offsetY > 0 ? `translateY(${offsetY}px)` : 'none',
-          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+          transform: isClosing 
+            ? 'translateY(100vh)' 
+            : (offsetY > 0 ? `translateY(${offsetY}px)` : 'none'),
+          transition: isDragging ? 'none' : 'transform 0.25s cubic-bezier(0.32, 0.72, 0, 1)',
         }}
         className="relative w-full max-w-lg bg-[#141126] border-t sm:border border-[#2b2746] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-slide-up sm:animate-scale-up max-h-[78vh] sm:max-h-[85vh] my-0 sm:my-auto touch-pan-y"
       >
         
         {/* Drag handle pill at top center */}
-        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] active:bg-primary/70 mx-auto mt-2.5 shrink-0 cursor-grab active:cursor-grabbing" />
+        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] active:bg-[#9d86e9] mx-auto mt-2.5 shrink-0 cursor-grab active:cursor-grabbing" />
 
         {/* Close Button */}
         <button
-          onClick={onClose}
+          onClick={handleClose}
           aria-label="Close details"
           className="absolute top-3 right-3 p-1.5 rounded-full bg-[#231f3d] hover:bg-[#2b2746] text-[#7c779b] hover:text-white border border-[#2b2746] transition-colors z-20 cursor-pointer"
         >
@@ -199,7 +215,7 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
         <div className="h-px bg-[#2b2746]/60 w-full shrink-0" />
 
         {/* Scrollable Content Body */}
-        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3.5 scrollbar-thin scrollbar-thumb-[#2b2746]">
+        <div data-scroll-container className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 space-y-3.5 scrollbar-thin scrollbar-thumb-[#2b2746]">
           {/* Synopsis Description */}
           {loading ? (
             <div className="flex items-center gap-2 text-xs text-[#7c779b] py-2">
