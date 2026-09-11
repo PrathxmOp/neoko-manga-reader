@@ -1219,11 +1219,9 @@ export const SettingsPage: React.FC = () => {
                 {/* Developer Profile Card */}
                 <div className="p-5 rounded-2xl bg-[#161327] border border-[#2b2746] flex flex-col gap-3 shadow-xl">
                   <div className="flex items-center gap-3">
-                    <img
-                      src="https://github.com/PrathxmOp.png"
-                      alt="Prathxm"
-                      className="w-12 h-12 rounded-2xl object-cover border-2 border-[#9d86e9]"
-                    />
+                    <div className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#9d86e9] to-[#6366f1] flex items-center justify-center text-white shadow-md border border-[#9d86e9]/40 shrink-0">
+                      <Sparkles className="w-5 h-5 text-white" />
+                    </div>
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
                         <h3 className="font-display font-bold text-base text-white">Prathxm</h3>
