@@ -1187,7 +1187,7 @@ export const ReaderPage: React.FC = () => {
         {settings.mode === 'webtoon' ? (
           /* Webtoon Continuous Strip (zoom surface with fitMode support) */
           <div 
-            className="reader-pages-content flex flex-col items-center mx-auto space-y-2 px-2"
+            className="reader-pages-content flex flex-col items-center mx-auto space-y-0 px-0"
             data-zoom-surface="true"
             style={{
               width: `${zoom}%`,
@@ -1228,7 +1228,7 @@ export const ReaderPage: React.FC = () => {
                 <div 
                   key={index} 
                   id={`reader-page-${index + 1}`}
-                  className="relative w-full reader-page-img bg-[#0B0D13] flex items-center justify-center rounded-xl overflow-hidden group select-none"
+                  className="relative w-full reader-page-img bg-[#0B0D13] flex items-center justify-center rounded-none overflow-hidden group select-none block"
                 >
                   <TranslationOverlay
                     isEnabled={isTranslationEnabled}
