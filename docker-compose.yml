@@ -9,8 +9,8 @@ services:
     environment:
       - TZ=Asia/Kolkata
       - SUWAYOMI_SERVER_BASIC_AUTH_ENABLED=true
-      - SUWAYOMI_SERVER_BASIC_AUTH_USERNAME=Prathxm
-      - SUWAYOMI_SERVER_BASIC_AUTH_PASSWORD=REDACTED_PASSWORD
+      - SUWAYOMI_SERVER_BASIC_AUTH_USERNAME=${SUWAYOMI_USER:-admin}
+      - SUWAYOMI_SERVER_BASIC_AUTH_PASSWORD=${SUWAYOMI_PASS:-admin}
     restart: unless-stopped
 
   flaresolverr:
