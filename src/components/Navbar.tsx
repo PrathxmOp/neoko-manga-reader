@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Search, Heart, Menu, X, Settings, Compass, Grid, Clock, Bookmark, BarChart3, FolderHeart, Eye, EyeOff } from 'lucide-react';
+import { Search, Heart, Menu, X, Settings, Compass, Grid, Clock, Bookmark, BarChart3, FolderHeart, Eye, EyeOff, Github } from 'lucide-react';
 import { getIncognitoMode, toggleIncognitoMode } from '../services/storage';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { RazorpayDonateButton } from './RazorpayDonateButton';
@@ -86,6 +86,17 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
               <Search className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
+            {/* GitHub Repository Link Button */}
+            <a
+              href="https://github.com/PrathxmOp/neoko-manga-reader"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full text-[#a5a3c2] hover:text-white hover:bg-[#1c1833] transition-colors"
+              title="GitHub Repository"
+            >
+              <Github className="w-4 h-4 sm:w-5 sm:h-5" />
+            </a>
+
             {/* Settings Button */}
             <button
               onClick={() => navigate('/settings')}
@@ -160,6 +171,16 @@ export const Navbar: React.FC<NavbarProps> = ({ activeSourceName }) => {
               <Settings className="w-4 h-4 text-[#9d86e9]" />
               <span>Settings</span>
             </button>
+            <a
+              href="https://github.com/PrathxmOp/neoko-manga-reader"
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setShowMobileDrawer(false)}
+              className="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold text-white hover:bg-[#231f3d] transition-colors"
+            >
+              <Github className="w-4 h-4 text-[#9d86e9]" />
+              <span>GitHub Repository (Open Source)</span>
+            </a>
 
             {/* Incognito Mode Toggle */}
             <div className="mt-1 pt-2 border-t border-[#2b2746]/60">

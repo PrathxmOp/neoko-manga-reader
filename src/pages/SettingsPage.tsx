@@ -1245,6 +1245,19 @@ export const SettingsPage: React.FC = () => {
                   <RazorpayDonateButton />
 
                   <a
+                    href="https://github.com/PrathxmOp/neoko-manga-reader"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="p-4 rounded-2xl bg-[#161327] border border-[#2b2746] hover:border-[#9d86e9]/50 flex items-center gap-3 transition-all group"
+                  >
+                    <Github className="w-5 h-5 text-[#9d86e9] group-hover:scale-110 transition-transform" />
+                    <div className="flex flex-col text-left">
+                      <span className="font-bold text-xs text-white">GitHub Open Source Repo</span>
+                      <span className="text-[10px] text-[#7c779b]">github.com/PrathxmOp/neoko-manga-reader</span>
+                    </div>
+                  </a>
+
+                  <a
                     href="https://discord.gg/bcw3dV6Jnt"
                     target="_blank"
                     rel="noopener noreferrer"
