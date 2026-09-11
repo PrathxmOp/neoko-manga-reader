@@ -6,6 +6,10 @@ export const NotFoundPage: React.FC = () => {
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
 
+  React.useEffect(() => {
+    document.title = '404 Page Not Found — NEOKO';
+  }, []);
+
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (searchQuery.trim()) {

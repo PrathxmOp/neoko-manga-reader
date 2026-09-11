@@ -536,6 +536,15 @@ export const ReaderPage: React.FC = () => {
 
   const [searchParams] = useSearchParams();
 
+  // Set document.title when chapter details load
+  useEffect(() => {
+    if (chapterDetails) {
+      document.title = `${chapterDetails.mangaTitle || 'Manga'} — ${chapterDetails.name || 'Chapter'} | NEOKO`;
+    } else {
+      document.title = 'Reader — NEOKO';
+    }
+  }, [chapterDetails]);
+
   // Continuously sync history progress & Suwayomi/Tracker read status whenever page changes
   useEffect(() => {
     if (pages.length > 0 && chapterDetails && chapterId) {
@@ -1048,17 +1057,20 @@ export const ReaderPage: React.FC = () => {
             {isAiTranslationGloballyEnabled && (
               <button
                 onClick={toggleTranslation}
-                className={`p-2 rounded-xl transition-all border border-white/5 relative ${
+                className={`px-2.5 py-1.5 rounded-xl transition-all duration-300 flex items-center gap-1.5 text-xs font-bold border cursor-pointer ${
                   isTranslationEnabled
-                    ? 'bg-[#9d86e9] text-[#0c0c14] shadow-lg shadow-[#9d86e9]/20 font-bold'
-                    : 'bg-surface-container-high hover:bg-surface-bright text-outline hover:text-on-surface'
+                    ? 'bg-[#9d86e9]/20 text-[#cbbcf6] border-[#9d86e9]/60 shadow-[0_0_15px_rgba(157,134,233,0.3)]'
+                    : 'bg-[#1c1833]/80 hover:bg-[#231f3d] text-[#7c779b] hover:text-white border-[#2b2746]'
                 }`}
-                title={isTranslationEnabled ? `Live Translation Active (${translationLang})` : 'Enable Live AI Translation'}
+                title={isTranslationEnabled ? `Live AI Translation Active (${translationLang})` : 'Enable Live AI Translation'}
               >
-                <Languages className="w-4 h-4" />
-                {isTranslationEnabled && (
-                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-emerald-400 rounded-full animate-ping" />
-                )}
+                <Languages className={`w-4 h-4 ${isTranslationEnabled ? 'text-[#9d86e9] animate-pulse' : 'text-[#7c779b]'}`} />
+                <span className="hidden md:inline font-sans text-xs font-bold">AI Trans</span>
+                <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-black uppercase transition-colors ${
+                  isTranslationEnabled ? 'bg-[#9d86e9] text-[#0c0c14] shadow-sm' : 'bg-[#231f3d] text-[#7c779b]'
+                }`}>
+                  {isTranslationEnabled ? 'ON' : 'OFF'}
+                </span>
               </button>
             )}
 
@@ -1803,13 +1815,16 @@ export const ReaderPage: React.FC = () => {
                   </div>
                   <button
                     onClick={toggleTranslation}
-                    className={`px-3 py-1 rounded-full text-xs font-bold transition-all border ${
-                      isTranslationEnabled
-                        ? 'bg-[#9d86e9] text-[#0c0c14] border-[#9d86e9] shadow-md'
-                        : 'bg-surface-container-high text-outline hover:text-on-surface border-white/5'
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer focus:outline-none ${
+                      isTranslationEnabled ? 'bg-[#9d86e9]' : 'bg-[#231f3d] border border-[#2b2746]'
                     }`}
+                    title={isTranslationEnabled ? 'Disable Live AI Translation' : 'Enable Live AI Translation'}
                   >
-                    {isTranslationEnabled ? 'ON' : 'OFF'}
+                    <span
+                      className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+                        isTranslationEnabled ? 'translate-x-6 bg-[#0c0c14]' : 'translate-x-1'
+                      }`}
+                    />
                   </button>
                 </div>
 

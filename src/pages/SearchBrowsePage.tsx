@@ -44,6 +44,18 @@ export const SearchBrowsePage: React.FC = () => {
   const [recentSearches, setRecentSearches] = useState<string[]>(getRecentSearches());
 
   useEffect(() => {
+    const genreParam = searchParams.get('genre');
+    const qParam = searchParams.get('q');
+    if (qParam) {
+      document.title = `Search: "${qParam}" — NEOKO`;
+    } else if (genreParam) {
+      document.title = `Genre: ${genreParam} — NEOKO`;
+    } else {
+      document.title = 'Browse Manga — NEOKO';
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     loadAndSearch(urlQuery, 1);
 
     getSources(true, true).then(sources => {

@@ -5,6 +5,8 @@ import { Flame, Star, BookOpen, BookmarkCheck, BookmarkPlus, ChevronLeft, Chevro
 import { isBookmarked, saveBookmark, removeBookmark } from '../services/storage';
 import { useSwipeGesture } from '../hooks/useSwipeGesture';
 
+import { DEFAULT_MANGA_COVER, handleImageError } from '../utils/imageUtils';
+
 interface HeroCarouselProps {
   items: Manga[];
 }
@@ -91,9 +93,10 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
         {/* Artwork Image Container */}
         <div className="relative w-full h-80 sm:h-96 overflow-hidden">
           <img
-            src={currentItem.thumbnailUrl || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&q=80'}
+            src={currentItem.thumbnailUrl || DEFAULT_MANGA_COVER}
             alt={currentItem.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none"
+            onError={handleImageError}
           />
 
           {/* Gradients */}

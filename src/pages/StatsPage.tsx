@@ -3,11 +3,17 @@ import { getReadingStats, resetReadingStats } from '../services/storage';
 import { getSiteStats } from '../services/suwayomiApi';
 import { ReadingStats, SiteStats } from '../types/manga';
 import { BarChart3, Flame, Clock, BookOpen, Sparkles, Trophy, Calendar, Award, RotateCcw, Database, Layers, Radio, Library, TrendingUp, Loader2, RefreshCw } from 'lucide-react';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export const StatsPage: React.FC = () => {
   const [stats, setStats] = useState<ReadingStats>(getReadingStats());
   const [siteStats, setSiteStats] = useState<SiteStats | null>(null);
   const [siteStatsLoading, setSiteStatsLoading] = useState(true);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  useEffect(() => {
+    document.title = 'Reading Stats — NEOKO';
+  }, []);
 
   useEffect(() => {
     const handleStatsChange = () => {
@@ -34,10 +40,13 @@ export const StatsPage: React.FC = () => {
   };
 
   const handleResetStats = () => {
-    if (confirm('Recalculate and reset reading statistics based on actual read chapters?')) {
-      const reset = resetReadingStats();
-      setStats(reset);
-    }
+    setShowResetConfirm(true);
+  };
+
+  const handleConfirmReset = () => {
+    const reset = resetReadingStats();
+    setStats(reset);
+    setShowResetConfirm(false);
   };
 
   const totalHours = Math.floor(stats.totalReadingTimeMinutes / 60);
@@ -302,6 +311,18 @@ export const StatsPage: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Reset Stats Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showResetConfirm}
+        title="Recalculate Reading Stats"
+        message="Are you sure you want to recalculate and reset your reading statistics based on your actual read chapters history?"
+        confirmLabel="Recalculate Stats"
+        cancelLabel="Cancel"
+        isDanger={false}
+        onConfirm={handleConfirmReset}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </main>
   );
 };

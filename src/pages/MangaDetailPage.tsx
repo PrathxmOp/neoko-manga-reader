@@ -3,13 +3,13 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Manga, Chapter, BookmarkItem, Source } from '../types/manga';
 import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText, autoBindTrackers, resolveMangaFromSourceByTitle, getSourceName, searchMultiSource, getImageUrl, getSources } from '../services/suwayomiApi';
 import { fetchAniListRating, AniListMangaData } from '../services/anilistApi';
-import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters } from '../services/storage';
+import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters, markAllChaptersRead, markAllChaptersUnread } from '../services/storage';
 import { useToast } from '../contexts/ToastContext';
 import { ChapterItem } from '../components/ChapterItem';
 import { 
   ArrowLeft, Star, Play, BookmarkCheck, BookmarkPlus, 
   Search, ArrowUpDown, ChevronDown, ChevronUp, Loader2, RefreshCw, X, Check, FolderPlus, BookOpen, Clock, Heart,
-  Share2, Layers, Grid, ChevronRight, Link, Zap, Radio
+  Share2, Layers, Grid, ChevronRight, Link, Zap, Radio, CheckCheck, EyeOff
 } from 'lucide-react';
 import { TrackerModal } from '../components/TrackerModal';
 
@@ -58,6 +58,14 @@ export const MangaDetailPage: React.FC = () => {
       loadManga(mangaId);
     }
   }, [mangaId]);
+
+  useEffect(() => {
+    if (manga?.title) {
+      document.title = `${manga.title} — NEOKO`;
+    } else {
+      document.title = 'Manga Details — NEOKO';
+    }
+  }, [manga?.title]);
 
   const loadManga = async (id: string, force: boolean = false) => {
     setLoading(true);
@@ -512,7 +520,8 @@ export const MangaDetailPage: React.FC = () => {
                 {genres.map(g => (
                   <span
                     key={g}
-                    className="bg-[#231f3d] px-3 py-1 rounded-full font-sans text-xs font-semibold text-slate-200 hover:bg-[#2b2746] transition-colors cursor-pointer"
+                    onClick={() => navigate(`/browse?genre=${encodeURIComponent(g.trim())}`)}
+                    className="bg-[#231f3d] px-3 py-1 rounded-full font-sans text-xs font-semibold text-slate-200 hover:bg-[#9d86e9]/20 hover:text-[#9d86e9] transition-colors cursor-pointer"
                   >
                     {g.trim()}
                   </span>
@@ -626,6 +635,37 @@ export const MangaDetailPage: React.FC = () => {
               >
                 <ArrowUpDown className="w-3.5 h-3.5 text-[#9d86e9]" />
                 <span>{sortAsc ? 'Oldest' : 'Newest'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (chapters.length === 0) return;
+                  const ids = chapters.map(c => c.id);
+                  const genresArr = Array.isArray(manga?.genre) ? manga.genre : (manga?.genre?.split(',') || []);
+                  markAllChaptersRead(ids, genresArr);
+                  setReadChaptersSet(getReadChapters());
+                  showToast(`Marked ${ids.length} chapters as read`, 'success');
+                }}
+                className="px-3 py-2 rounded-xl bg-[#1c1833] hover:bg-[#231f3d] text-slate-300 font-sans text-xs font-bold flex items-center gap-1.5 border border-[#2b2746] transition-colors shrink-0 cursor-pointer"
+                title="Mark all chapters as read"
+              >
+                <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Mark All Read</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (chapters.length === 0) return;
+                  const ids = chapters.map(c => c.id);
+                  markAllChaptersUnread(ids);
+                  setReadChaptersSet(getReadChapters());
+                  showToast(`Marked ${ids.length} chapters as unread`, 'info');
+                }}
+                className="px-3 py-2 rounded-xl bg-[#1c1833] hover:bg-[#231f3d] text-slate-300 font-sans text-xs font-bold flex items-center gap-1.5 border border-[#2b2746] transition-colors shrink-0 cursor-pointer"
+                title="Mark all chapters as unread"
+              >
+                <EyeOff className="w-3.5 h-3.5 text-slate-400" />
+                <span className="hidden sm:inline">Mark All Unread</span>
               </button>
             </div>
           </div>

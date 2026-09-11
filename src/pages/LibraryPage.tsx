@@ -4,6 +4,7 @@ import { BookmarkItem, HistoryItem, Manga } from '../types/manga';
 import { getBookmarks, getHistory, removeBookmark, saveBookmark, removeHistoryItem, clearHistory } from '../services/storage';
 import { MangaCard } from '../components/MangaCard';
 import { MangaInfoModal } from '../components/MangaInfoModal';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { useToast } from '../contexts/ToastContext';
 import { Bookmark, Clock, Trash2, BookOpen, Layers, Star, Heart, Check, ArrowUpDown, CheckSquare, Square, X, FolderInput } from 'lucide-react';
 
@@ -28,6 +29,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ defaultTab }) => {
   // Quick Info Preview State
   const [previewManga, setPreviewManga] = useState<Manga | null>(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [showConfirmClearHistory, setShowConfirmClearHistory] = useState(false);
 
   const handleOpenPreview = (manga: Manga, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
@@ -36,6 +38,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ defaultTab }) => {
   };
 
   useEffect(() => {
+    document.title = 'My Library — NEOKO';
     const refreshData = () => {
       setBookmarks(getBookmarks());
       setHistory(getHistory());
@@ -70,11 +73,10 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ defaultTab }) => {
   };
 
   const handleClearAllHistory = () => {
-    if (window.confirm('Are you sure you want to clear all reading history?')) {
-      clearHistory();
-      setHistory([]);
-      showToast('History cleared', 'info');
-    }
+    clearHistory();
+    setHistory([]);
+    setShowConfirmClearHistory(false);
+    showToast('History cleared', 'info');
   };
 
   const handleToggleSelectManga = (mangaId: string | number) => {
@@ -196,7 +198,7 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ defaultTab }) => {
 
           {activeTab === 'History' && history.length > 0 && (
             <button
-              onClick={handleClearAllHistory}
+              onClick={() => setShowConfirmClearHistory(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs font-bold border border-rose-500/30 transition-colors self-end sm:self-auto cursor-pointer"
             >
               <Trash2 className="w-3.5 h-3.5" />
@@ -438,6 +440,18 @@ export const LibraryPage: React.FC<LibraryPageProps> = ({ defaultTab }) => {
         manga={previewManga}
         isOpen={isInfoModalOpen}
         onClose={() => setIsInfoModalOpen(false)}
+      />
+
+      {/* Clear History Confirmation Modal */}
+      <ConfirmModal
+        isOpen={showConfirmClearHistory}
+        title="Clear Reading History"
+        message="Are you sure you want to clear your entire reading history? This action cannot be undone."
+        confirmLabel="Clear History"
+        cancelLabel="Cancel"
+        isDanger={true}
+        onConfirm={handleClearAllHistory}
+        onCancel={() => setShowConfirmClearHistory(false)}
       />
     </main>
   );

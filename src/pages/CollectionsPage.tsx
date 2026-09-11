@@ -5,6 +5,7 @@ import { MangaCollection } from '../types/manga';
 import { useToast } from '../contexts/ToastContext';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
 import { FolderHeart, Plus, Trash2, Edit2, BookOpen, Layers, X, Folder } from 'lucide-react';
+import { ConfirmModal } from '../components/ConfirmModal';
 
 export const CollectionsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +13,7 @@ export const CollectionsPage: React.FC = () => {
   const [collections, setCollections] = useState<MangaCollection[]>(getCollections());
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingCollection, setEditingCollection] = useState<MangaCollection | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
   useBodyScrollLock(showCreateModal);
 
@@ -21,6 +23,7 @@ export const CollectionsPage: React.FC = () => {
   const [colorInput, setColorInput] = useState('#9d86e9');
 
   useEffect(() => {
+    document.title = 'Collections — NEOKO';
     const handleCollectionsChange = () => {
       setCollections(getCollections());
     };
@@ -61,10 +64,15 @@ export const CollectionsPage: React.FC = () => {
   };
 
   const handleDelete = (id: string, name: string) => {
-    if (confirm(`Are you sure you want to delete collection "${name}"?`)) {
-      const updated = deleteCollection(id);
+    setDeleteTarget({ id, name });
+  };
+
+  const confirmDelete = () => {
+    if (deleteTarget) {
+      const updated = deleteCollection(deleteTarget.id);
       setCollections(updated);
-      showToast(`Collection "${name}" deleted`, 'info');
+      showToast(`Collection "${deleteTarget.name}" deleted`, 'info');
+      setDeleteTarget(null);
     }
   };
 
@@ -249,6 +257,18 @@ export const CollectionsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete Collection Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deleteTarget)}
+        title="Delete Collection"
+        message={deleteTarget ? `Are you sure you want to delete the collection "${deleteTarget.name}"? Manga inside will not be deleted from library.` : ''}
+        confirmLabel="Delete Collection"
+        cancelLabel="Cancel"
+        isDanger={true}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </main>
   );
 };

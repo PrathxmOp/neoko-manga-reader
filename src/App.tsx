@@ -10,6 +10,8 @@ import { AntiScraperGuard } from './components/AntiScraperGuard';
 import { WifiOff } from 'lucide-react';
 import { TopProgressBar } from './components/TopProgressBar';
 
+import { ErrorBoundary } from './components/ErrorBoundary';
+
 const DiscoverPage = React.lazy(() => import('./pages/DiscoverPage'));
 const SearchBrowsePage = React.lazy(() => import('./pages/SearchBrowsePage'));
 const MangaDetailPage = React.lazy(() => import('./pages/MangaDetailPage'));
@@ -93,23 +95,25 @@ export const App: React.FC = () => {
             <div className="min-h-screen bg-[var(--bg-main)] font-sans text-[var(--text-main)] flex flex-col relative selection:bg-primary/30 selection:text-primary pb-20">
               <Navbar />
               <OfflineBanner />
-              <React.Suspense fallback={<PageFallback />}>
-                <Routes>
-                  <Route path="/" element={<DiscoverPage />} />
-                  <Route path="/browse" element={<SearchBrowsePage />} />
-                  <Route path="/updates" element={<UpdatesPage />} />
-                  <Route path="/manga/:mangaId" element={<MangaDetailPage />} />
-                  <Route path="/read/:chapterId" element={<ReaderPage />} />
-                  <Route path="/read/:mangaId/:chapterId" element={<ReaderPage />} />
-                  <Route path="/library" element={<LibraryPage />} />
-                  <Route path="/history" element={<LibraryPage defaultTab="History" />} />
-                  <Route path="/collections" element={<CollectionsPage />} />
-                  <Route path="/stats" element={<StatsPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="/profile" element={<SettingsPage />} />
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
-              </React.Suspense>
+              <ErrorBoundary>
+                <React.Suspense fallback={<PageFallback />}>
+                  <Routes>
+                    <Route path="/" element={<DiscoverPage />} />
+                    <Route path="/browse" element={<SearchBrowsePage />} />
+                    <Route path="/updates" element={<UpdatesPage />} />
+                    <Route path="/manga/:mangaId" element={<MangaDetailPage />} />
+                    <Route path="/read/:chapterId" element={<ReaderPage />} />
+                    <Route path="/read/:mangaId/:chapterId" element={<ReaderPage />} />
+                    <Route path="/library" element={<LibraryPage />} />
+                    <Route path="/history" element={<LibraryPage defaultTab="History" />} />
+                    <Route path="/collections" element={<CollectionsPage />} />
+                    <Route path="/stats" element={<StatsPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="/profile" element={<SettingsPage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                  </Routes>
+                </React.Suspense>
+              </ErrorBoundary>
 
               <InstallPrompt />
               <BottomDock />

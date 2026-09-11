@@ -9,6 +9,7 @@ import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaListItem } from '../components/MangaListItem';
 import { ContentLanguageModal } from '../components/ContentLanguageModal';
 import { MangaInfoModal } from '../components/MangaInfoModal';
+import { HeroCarousel } from '../components/HeroCarousel';
 import { useScrollDrag } from '../hooks/useScrollDrag';
 import { SlidersHorizontal, ChevronDown, RefreshCw, Compass, Loader2, Search, Play, Sparkles, BookOpen, Clock, X, Send, MessageSquare } from 'lucide-react';
 
@@ -93,6 +94,7 @@ export const DiscoverPage: React.FC = () => {
   const observerTarget = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    document.title = 'NEOKO — Discover Manga';
     // Hydrate Continue Reading items
     setContinueReading(getContinueReadingList());
 
@@ -398,6 +400,11 @@ export const DiscoverPage: React.FC = () => {
           <MessageSquare className="w-3 h-3" />
         </div>
       </a>
+
+      {/* Hero Carousel */}
+      {filteredPopular.length > 0 && (
+        <HeroCarousel items={filteredPopular.slice(0, 6)} />
+      )}
 
       {/* 1. Continue Reading Row */}
       {continueReading.length > 0 && (

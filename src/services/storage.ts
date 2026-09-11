@@ -26,7 +26,7 @@ export function getCachedData<T>(key: string): T | null {
 }
 
 export function setCachedData<T>(key: string, data: T, ttlMinutes: number = 60 * 24 * 30) {
-  setAppCache<T>(API_CACHE_PREFIX + key, data);
+  setAppCache<T>(API_CACHE_PREFIX + key, data, ttlMinutes);
 }
 
 export function clearApiCache() {
@@ -202,6 +202,30 @@ export function markChapterRead(chapterId: string | number, genres: string[] = [
 export function markChapterUnread(chapterId: string | number) {
   const set = getReadChapters();
   set.delete(String(chapterId));
+  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+}
+
+export function markAllChaptersRead(chapterIds: (string | number)[], genres: string[] = []) {
+  const set = getReadChapters();
+  let newlyReadCount = 0;
+  chapterIds.forEach(id => {
+    const idStr = String(id);
+    if (!set.has(idStr)) {
+      set.add(idStr);
+      newlyReadCount++;
+    }
+  });
+  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  if (newlyReadCount > 0) {
+    updateReadingStats(newlyReadCount, newlyReadCount * 3, genres);
+  }
+}
+
+export function markAllChaptersUnread(chapterIds: (string | number)[]) {
+  const set = getReadChapters();
+  chapterIds.forEach(id => {
+    set.delete(String(id));
+  });
   localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
 }
 
@@ -900,9 +924,9 @@ export function saveTranslationLanguage(lang: string): void {
 export function getAiTranslationEnabled(): boolean {
   try {
     const val = localStorage.getItem(AI_TRANSLATION_ENABLED_KEY);
-    return val !== null ? val === 'true' : true;
+    return val !== null ? val === 'true' : false;
   } catch {
-    return true;
+    return false;
   }
 }
 

@@ -26,7 +26,7 @@ export const BottomDock: React.FC = React.memo(() => {
     { label: 'Home', path: '/', icon: Home },
     { label: 'Browse', path: '/browse', icon: Search },
     { label: 'Library', path: '/library', icon: BookOpen },
-    { label: 'Stats', path: '/stats', icon: BarChart3 },
+    { label: 'Updates', path: '/updates', icon: Clock },
     { label: 'Settings', path: '/settings', icon: Settings },
   ];
 

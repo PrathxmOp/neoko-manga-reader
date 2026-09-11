@@ -33,9 +33,10 @@ interface CacheMeta {
   key: string;
   size: number;
   updatedAt: number;
+  expiresAt?: number;
 }
 
-const memoryCache = new Map<string, { data: any; size: number; updatedAt: number }>();
+const memoryCache = new Map<string, { data: any; size: number; updatedAt: number; expiresAt?: number }>();
 
 function getIndex(): CacheMeta[] {
   try {
@@ -83,20 +84,21 @@ function enforceCacheLimit(incomingSize: number) {
   } catch {}
 }
 
-export function setAppCache<T>(key: string, data: T): void {
+export function setAppCache<T>(key: string, data: T, ttlMinutes?: number): void {
   if (!key || data === undefined || data === null) return;
 
   try {
     const size = calculateSize(data);
     enforceCacheLimit(size);
 
-    const meta: CacheMeta = { key, size, updatedAt: Date.now() };
+    const expiresAt = ttlMinutes && ttlMinutes > 0 ? Date.now() + ttlMinutes * 60 * 1000 : undefined;
+    const meta: CacheMeta = { key, size, updatedAt: Date.now(), expiresAt };
 
     let index = getIndex().filter(i => i.key !== key);
     index.push(meta);
     saveIndex(index);
 
-    memoryCache.set(key, { data, size, updatedAt: Date.now() });
+    memoryCache.set(key, { data, size, updatedAt: Date.now(), expiresAt });
 
     try {
       localStorage.setItem(key, JSON.stringify(data));
@@ -110,8 +112,24 @@ export function getAppCache<T>(key: string): T | null {
   if (!key) return null;
 
   try {
+    const index = getIndex();
+    const meta = index.find(i => i.key === key);
+    if (meta?.expiresAt && Date.now() > meta.expiresAt) {
+      memoryCache.delete(key);
+      try {
+        localStorage.removeItem(key);
+        saveIndex(index.filter(i => i.key !== key));
+      } catch {}
+      return null;
+    }
+
     if (memoryCache.has(key)) {
       const item = memoryCache.get(key)!;
+      if (item.expiresAt && Date.now() > item.expiresAt) {
+        memoryCache.delete(key);
+        try { localStorage.removeItem(key); } catch {}
+        return null;
+      }
       item.updatedAt = Date.now();
       return item.data as T;
     }
@@ -121,7 +139,7 @@ export function getAppCache<T>(key: string): T | null {
       const data = JSON.parse(raw);
       if (data !== undefined && data !== null) {
         const size = calculateSize(data);
-        memoryCache.set(key, { data, size, updatedAt: Date.now() });
+        memoryCache.set(key, { data, size, updatedAt: Date.now(), expiresAt: meta?.expiresAt });
         return data as T;
       }
     }

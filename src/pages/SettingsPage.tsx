@@ -49,6 +49,10 @@ export const SettingsPage: React.FC = () => {
   const { showToast } = useToast();
   const [searchQuery, setSearchQuery] = useState('');
 
+  useEffect(() => {
+    document.title = 'Settings — NEOKO';
+  }, []);
+
   const initialTabParam = searchParams.get('tab') as SettingsTab;
   const [activeTab, setActiveTabState] = useState<SettingsTab>(
     initialTabParam && TABS.some(t => t.id === initialTabParam) ? initialTabParam : 'general'

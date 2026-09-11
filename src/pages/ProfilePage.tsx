@@ -12,6 +12,10 @@ export const ProfilePage: React.FC = () => {
   const { user, updateProfile } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   useBodyScrollLock(isEditing);
+
+  React.useEffect(() => {
+    document.title = 'Profile — NEOKO';
+  }, []);
   const [editName, setEditName] = useState(user?.username || 'Reader');
   const [editAvatar, setEditAvatar] = useState(user?.avatar || '🔮');
 

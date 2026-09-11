@@ -1,90 +1,150 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../contexts/AuthContext';
 import { getBookmarks, getHistory } from '../services/storage';
-import { HistoryItem } from '../types/manga';
-import { Clock } from 'lucide-react';
+import { getLatestUpdates } from '../services/suwayomiApi';
+import { Manga, HistoryItem } from '../types/manga';
+import { Clock, RefreshCw, Sparkles, BookOpen, Layers, Loader2 } from 'lucide-react';
+import { MangaCard } from '../components/MangaCard';
 import { MangaListItem } from '../components/MangaListItem';
 
 export const UpdatesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [updates, setUpdates] = useState<HistoryItem[]>([]);
+  const [activeTab, setActiveTab] = useState<'server' | 'history'>('server');
+  const [serverUpdates, setServerUpdates] = useState<Manga[]>([]);
+  const [historyItems, setHistoryItems] = useState<HistoryItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
-    loadUpdates();
+    document.title = 'New Updates — NEOKO';
+    loadData();
   }, []);
 
-  const loadUpdates = () => {
-    const history = getHistory();
-    const bookmarks = getBookmarks();
+  const loadData = async (force: boolean = false) => {
+    if (force) setRefreshing(true);
+    else setLoading(true);
 
-    if (history.length > 0) {
-      setUpdates(history);
-    } else if (bookmarks.length > 0) {
-      const converted: HistoryItem[] = bookmarks.map((b) => ({
-        mangaId: b.manga.id,
-        mangaTitle: b.manga.title,
-        thumbnailUrl: b.manga.thumbnailUrl,
-        chapterId: b.manga.chapters?.[0]?.id || 1,
-        chapterName: b.manga.chapters?.[0]?.name || 'Chapter 1',
-        readAt: b.addedAt,
-      }));
-      setUpdates(converted);
-    } else {
-      setUpdates([]);
+    try {
+      const [serverManga, history] = await Promise.all([
+        getLatestUpdates(30, force),
+        Promise.resolve(getHistory()),
+      ]);
+      setServerUpdates(serverManga);
+      setHistoryItems(history);
+    } catch (e) {
+      console.error('Failed to load updates:', e);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  // If user is not logged in or no history: Kagane Screenshot 4 empty state
-  if (updates.length === 0) {
-    return (
-      <main className="flex flex-col items-center justify-center min-h-[75vh] px-4 text-center animate-fade-in">
-        <div className="w-24 h-24 rounded-full bg-[#1c1833] flex items-center justify-center mb-6 border border-[#2b2746] shadow-xl">
-          <Clock className="w-12 h-12 text-[#9d86e9]" />
-        </div>
-
-        <h1 className="font-display font-extrabold text-2xl sm:text-3xl text-white tracking-tight mb-2">
-          No Reading History Yet
-        </h1>
-
-        <p className="font-sans text-sm text-[#7c779b] max-w-sm mb-6 leading-relaxed">
-          Start reading manga to see your recent history and chapter updates here.
-        </p>
-
-        <button
-          onClick={() => navigate('/browse')}
-          className="px-6 py-2.5 rounded-xl bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] font-bold text-sm shadow-lg transition-all active:scale-95"
-        >
-          Browse Catalog
-        </button>
-      </main>
-    );
-  }
-
   return (
-    <main className="flex flex-col relative w-full pt-16 sm:pt-20 pb-24 px-3 sm:px-6 max-w-7xl mx-auto space-y-4 animate-fade-in">
-      <div className="flex items-center justify-between border-b border-[#1f1c35] pb-3">
-        <div className="flex items-center gap-2">
-          <Clock className="w-5 h-5 text-[#9d86e9]" />
-          <h1 className="font-display font-extrabold text-xl sm:text-2xl text-white tracking-tight">
-            Reading History & Updates
-          </h1>
+    <main className="flex flex-col relative w-full pt-16 sm:pt-20 pb-24 px-3 sm:px-6 max-w-7xl mx-auto space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-3 border-b border-[#2b2746]">
+        <div className="flex items-center gap-3">
+          <div className="p-2.5 rounded-2xl bg-[#9d86e9]/10 text-[#9d86e9] border border-[#9d86e9]/20">
+            <Clock className="w-6 h-6" />
+          </div>
+          <div>
+            <h1 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight">
+              Manga Updates
+            </h1>
+            <p className="text-xs text-[#7c779b]">
+              Discover newly released chapters across your active extensions
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-[#7c779b] font-medium">
-          {updates.length} items logged
-        </span>
+
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <button
+            onClick={() => loadData(true)}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[#231f3d] hover:bg-[#2b2746] text-slate-200 text-xs font-bold border border-[#2b2746] transition-all cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin text-[#9d86e9]' : ''}`} />
+            <span>Refresh</span>
+          </button>
+        </div>
       </div>
 
-      {updates.length === 0 ? (
-        <div className="py-20 flex flex-col items-center justify-center text-center space-y-3 bg-[#161327] rounded-2xl border border-[#2b2746]">
-          <Clock className="w-12 h-12 text-[#7c779b]" />
-          <p className="font-sans text-base font-semibold text-white">No reading history yet</p>
-          <p className="font-sans text-xs text-[#7c779b]">Start reading manga to automatically track your progress here.</p>
+      {/* Tabs Bar */}
+      <div className="flex items-center gap-2 border-b border-[#2b2746] pb-2">
+        <button
+          onClick={() => setActiveTab('server')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'server'
+              ? 'bg-[#9d86e9] text-[#0c0c14] shadow-lg shadow-[#9d86e9]/20'
+              : 'text-[#7c779b] hover:text-white hover:bg-[#161327]'
+          }`}
+        >
+          <Sparkles className="w-4 h-4" />
+          <span>New Server Chapters ({serverUpdates.length})</span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('history')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            activeTab === 'history'
+              ? 'bg-[#9d86e9] text-[#0c0c14] shadow-lg shadow-[#9d86e9]/20'
+              : 'text-[#7c779b] hover:text-white hover:bg-[#161327]'
+          }`}
+        >
+          <BookOpen className="w-4 h-4" />
+          <span>Recent History ({historyItems.length})</span>
+        </button>
+      </div>
+
+      {/* Content Feed */}
+      {loading ? (
+        <div className="py-20 flex flex-col items-center justify-center text-center space-y-3">
+          <Loader2 className="w-8 h-8 text-[#9d86e9] animate-spin" />
+          <p className="text-xs text-[#7c779b]">Fetching latest chapter releases...</p>
+        </div>
+      ) : activeTab === 'server' ? (
+        serverUpdates.length === 0 ? (
+          <div className="py-20 flex flex-col items-center justify-center text-center space-y-4 bg-[#161327] rounded-3xl border border-[#2b2746] p-8">
+            <Clock className="w-12 h-12 text-[#7c779b]" />
+            <div>
+              <p className="text-base font-bold text-white">No recent server updates</p>
+              <p className="text-xs text-[#7c779b] mt-1 max-w-sm">
+                Connect extension sources or refresh to check for new chapter releases.
+              </p>
+            </div>
+            <button
+              onClick={() => navigate('/browse')}
+              className="px-5 py-2.5 rounded-xl bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] text-xs font-bold shadow-lg transition-all"
+            >
+              Browse Sources
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
+            {serverUpdates.map((manga) => (
+              <MangaCard key={manga.id} manga={manga} />
+            ))}
+          </div>
+        )
+      ) : historyItems.length === 0 ? (
+        <div className="py-20 flex flex-col items-center justify-center text-center space-y-4 bg-[#161327] rounded-3xl border border-[#2b2746] p-8">
+          <BookOpen className="w-12 h-12 text-[#7c779b]" />
+          <div>
+            <p className="text-base font-bold text-white">No reading history</p>
+            <p className="text-xs text-[#7c779b] mt-1">
+              Start reading manga to automatically log your reading history here.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/browse')}
+            className="px-5 py-2.5 rounded-xl bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] text-xs font-bold shadow-lg transition-all"
+          >
+            Explore Manga
+          </button>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
-          {updates.map((item, idx) => (
+          {historyItems.map((item, idx) => (
             <MangaListItem
               key={`${item.mangaId}-${item.chapterId}-${idx}`}
               manga={{
@@ -104,4 +164,3 @@ export const UpdatesPage: React.FC = () => {
 };
 
 export default UpdatesPage;
-

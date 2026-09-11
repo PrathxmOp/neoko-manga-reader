@@ -1,9 +1,10 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Manga } from '../types/manga';
-import { BookOpen, Info } from 'lucide-react';
+import { BookOpen, Info, Sparkles } from 'lucide-react';
 import { getSourceName, getImageUrl } from '../services/suwayomiApi';
 import { getComicType, getComicTypeColor } from '../utils/mangaType';
+import { DEFAULT_MANGA_COVER, handleImageError } from '../utils/imageUtils';
 
 interface MangaCardProps {
   manga: Manga;
@@ -47,15 +48,13 @@ export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadg
       {/* Poster Artwork Box */}
       <div className="relative aspect-[3/4] w-full rounded-2xl overflow-hidden bg-[#161327] shadow-lg border border-[#2b2746] group-hover:border-[#9d86e9]/60 group-hover:shadow-[0_0_24px_rgba(157,134,233,0.3)] transition-all">
         <img
-          src={getImageUrl(manga.thumbnailUrl) || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&q=80'}
+          src={getImageUrl(manga.thumbnailUrl) || DEFAULT_MANGA_COVER}
           alt={manga.title}
           loading="lazy"
           decoding="async"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=400&q=80';
-          }}
+          onError={handleImageError}
         />
 
         {/* Gradient Overlay */}
@@ -89,6 +88,12 @@ export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadg
             >
               <Info className="w-3.5 h-3.5" />
             </button>
+          )}
+          {typeof manga.unreadCount === 'number' && manga.unreadCount > 0 && (
+            <span className="px-2 py-0.5 rounded-md bg-[#9d86e9] text-[#0c0c14] font-sans text-[10px] font-black shadow-lg border border-white/20 pointer-events-none flex items-center gap-1">
+              <Sparkles className="w-2.5 h-2.5 fill-current" />
+              {manga.unreadCount} new
+            </span>
           )}
           {typeof progressPercent === 'number' && progressPercent > 0 && (
             <span className="px-2 py-0.5 rounded-md bg-[#9d86e9]/90 backdrop-blur-md text-white font-sans text-[10px] font-extrabold shadow-md border border-[#9d86e9]/40 pointer-events-none">
