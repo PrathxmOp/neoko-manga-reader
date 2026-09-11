@@ -38,6 +38,7 @@ export const MangaDetailPage: React.FC = () => {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [sourceSearchLoading, setSourceSearchLoading] = useState(false);
   const [sourceSearchResults, setSourceSearchResults] = useState<Manga[]>([]);
+  const [sourceSearchQuery, setSourceSearchQuery] = useState('');
 
   useBodyScrollLock(showCategoryModal || showTrackerModal || showSourceModal);
   const [expandDesc, setExpandDesc] = useState(false);
@@ -181,20 +182,37 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
-  const handleOpenChangeSource = async () => {
-    if (!manga) return;
-    setShowSourceModal(true);
+  const executeSourceSearch = async (queryToSearch: string, forceRefresh: boolean = false) => {
+    if (!queryToSearch.trim()) return;
     setSourceSearchLoading(true);
     try {
-      const allSources = await getSources(true, true);
+      const allSources = await getSources(false, true);
       const activeIds = allSources.map((s: Source) => s.id);
-      const res = await searchMultiSource(activeIds, manga.title, 1, true);
+      
+      let res = await searchMultiSource(activeIds, queryToSearch.trim(), 1, forceRefresh);
+      
+      // Fallback: If 0 results returned, try stripped punctuation/part title
+      if ((!res.mangas || res.mangas.length === 0) && (queryToSearch.includes(':') || queryToSearch.includes('-'))) {
+        const mainPart = queryToSearch.split(/[:\-]/)[0].trim();
+        if (mainPart && mainPart.length > 2 && mainPart !== queryToSearch.trim()) {
+          res = await searchMultiSource(activeIds, mainPart, 1, false);
+        }
+      }
+
       setSourceSearchResults(res.mangas || []);
     } catch (err) {
       console.error('Source search error:', err);
     } finally {
       setSourceSearchLoading(false);
     }
+  };
+
+  const handleOpenChangeSource = async () => {
+    if (!manga) return;
+    setShowSourceModal(true);
+    const initialQuery = manga.title.replace(/[\(\[\{\\\/].*?[\)\]\}]/g, '').trim() || manga.title;
+    setSourceSearchQuery(initialQuery);
+    await executeSourceSearch(initialQuery);
   };
 
   const handleRefreshChapters = async () => {
@@ -683,19 +701,55 @@ export const MangaDetailPage: React.FC = () => {
               </button>
             </div>
 
+            <div className="p-4 border-b border-[#2b2746] bg-[#141126]">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  executeSourceSearch(sourceSearchQuery, true);
+                }}
+                className="flex items-center gap-2"
+              >
+                <div className="relative flex-1">
+                  <Search className="w-4 h-4 text-[#7c779b] absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    value={sourceSearchQuery}
+                    onChange={(e) => setSourceSearchQuery(e.target.value)}
+                    placeholder="Search title across extension sources..."
+                    className="w-full pl-9 pr-3 py-2 bg-[#1c1833] border border-[#2b2746] focus:border-[#9d86e9] rounded-xl text-xs text-white placeholder-[#7c779b] outline-none transition-colors"
+                  />
+                </div>
+                <button
+                  type="submit"
+                  disabled={sourceSearchLoading}
+                  className="px-3.5 py-2 bg-[#9d86e9] hover:bg-[#b19cf5] disabled:opacity-50 text-black font-extrabold text-xs rounded-xl transition-colors cursor-pointer shrink-0 flex items-center gap-1.5"
+                >
+                  {sourceSearchLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                  <span>Search</span>
+                </button>
+              </form>
+            </div>
+
             <div className="p-4 flex-1 min-h-0 overflow-y-auto space-y-3 scrollbar-thin">
-              <p className="text-xs text-[#7c779b]">
-                Select an alternative extension source to read <strong className="text-white">{manga.title}</strong>:
-              </p>
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-[#7c779b]">
+                  Select an alternative extension source to read <strong className="text-white">{sourceSearchQuery.trim() || manga.title}</strong>:
+                </p>
+                {!sourceSearchLoading && sourceSearchResults.length > 0 && (
+                  <span className="text-[11px] font-bold text-[#9d86e9] shrink-0 ml-2">
+                    {sourceSearchResults.length} sources found
+                  </span>
+                )}
+              </div>
 
               {sourceSearchLoading ? (
                 <div className="py-12 flex flex-col items-center justify-center gap-2 text-slate-400">
                   <Loader2 className="w-6 h-6 animate-spin text-[#9d86e9]" />
-                  <span className="text-xs font-semibold">Searching active extensions...</span>
+                  <span className="text-xs font-semibold">Searching active extension sources...</span>
                 </div>
               ) : sourceSearchResults.length === 0 ? (
                 <div className="py-8 text-center text-xs text-slate-400">
-                  No alternative source results found for this title.
+                  No alternative source results found. Try editing the search query above.
                 </div>
               ) : (
                 <div className="space-y-2.5">

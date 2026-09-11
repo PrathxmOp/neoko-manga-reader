@@ -3,6 +3,7 @@ import { getContentFilterSettings, saveContentFilterSettings } from '../services
 import { ContentFilterSettings } from '../types/manga';
 import { X, Check, ShieldCheck, Flame, Shield } from 'lucide-react';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useSwipeDismiss } from '../hooks/useSwipeDismiss';
 
 import { AgeVerificationModal } from './AgeVerificationModal';
 
@@ -19,6 +20,11 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
     settings.contentRating || 'normal'
   );
   const [showAgeModal, setShowAgeModal] = useState(false);
+
+  const { ref: dismissRef, offsetY, isDragging } = useSwipeDismiss<HTMLDivElement>({
+    onDismiss: onClose,
+    enabled: isOpen,
+  });
 
   if (!isOpen) return null;
 
@@ -58,14 +64,23 @@ export const ContentLanguageModal: React.FC<ModalProps> = ({ isOpen, onClose, on
       key: '18+',
       title: '18+ Mode',
       badge: 'Adult (18+)',
-      desc: 'Unlocks explicit 18+ adult content, erotica, and adult sources.',
+      desc: 'Allows explicit 18+ content and raw mature extensions.',
       icon: Flame,
     },
   ];
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-3 pt-14 pb-16 sm:p-4 bg-black/85 backdrop-blur-md animate-fade-in">
-      <div className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-[#2b2746] p-5 sm:p-6 shadow-2xl space-y-5 text-white max-h-[calc(100vh-130px)] sm:max-h-[85vh] flex flex-col my-auto">
+      <div 
+        ref={dismissRef}
+        style={{
+          transform: offsetY > 0 ? `translateY(${offsetY}px)` : 'none',
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+        className="relative w-full max-w-lg bg-[#141824] rounded-3xl border border-[#2b2746] p-5 sm:p-6 shadow-2xl space-y-5 text-white max-h-[calc(100vh-130px)] sm:max-h-[85vh] flex flex-col my-auto touch-pan-y"
+      >
+        {/* Drag handle pill */}
+        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] mx-auto -mt-2 mb-1 shrink-0 cursor-grab active:cursor-grabbing" />
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#2b2746] pb-3 shrink-0">
           <div className="flex items-center gap-2.5">

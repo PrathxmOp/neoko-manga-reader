@@ -13,6 +13,24 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="NEOKO" />
 
+  <!-- Self-cleaning script to unregister broken Service Workers and purge legacy caches -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.getRegistrations().then(function(registrations) {
+        for (var i = 0; i < registrations.length; i++) {
+          registrations[i].unregister();
+        }
+      }).catch(function() {});
+    }
+    if ('caches' in window) {
+      caches.keys().then(function(names) {
+        for (var i = 0; i < names.length; i++) {
+          caches.delete(names[i]);
+        }
+      }).catch(function() {});
+    }
+  </script>
+
   <!-- Open Graph -->
   <meta property="og:type" content="website" />
   <meta property="og:title" content="NEOKO — Modern Manga Reader" />

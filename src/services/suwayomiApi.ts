@@ -505,8 +505,8 @@ export async function searchMultiSource(
     return aRec - bRec;
   });
 
-  // Cap max concurrent sources queried at once (query up to 25 sources for title search or all explicitly passed sourceIds)
-  const maxLimit = sourceIds && sourceIds.length > 0 ? sourceIds.length : (queryText.trim() ? 25 : 12);
+  // Cap max concurrent sources queried at once (top 16 prioritized sources for title search)
+  const maxLimit = queryText.trim() ? Math.min(16, validSourceIds.length) : (sourceIds && sourceIds.length > 0 ? sourceIds.length : 12);
   const targetSourceIds = validSourceIds.slice(0, maxLimit);
   const fetchType = queryText.trim() ? 'SEARCH' : type;
 
@@ -516,17 +516,25 @@ export async function searchMultiSource(
     if (cached && cached.mangas && cached.mangas.length > 0) return cached;
   }
 
-  // Cap each source request to max 3000ms timeout so slow/hanging sources don't block the UI
+  // Set 6s timeout for searches so scrapers respond fast without hanging the UI
+  const timeoutMs = queryText.trim() ? 6000 : 3500;
+
   const fetchWithTimeout = (sId: string) =>
     Promise.race([
       fetchSourceManga(sId, queryText, page, fetchType, forceRefresh),
       new Promise<{ mangas: Manga[]; hasNextPage: boolean; error?: string }>((resolve) =>
-        setTimeout(() => resolve({ mangas: [], hasNextPage: false, error: 'Source Timeout' }), 3000)
+        setTimeout(() => resolve({ mangas: [], hasNextPage: false, error: 'Source Timeout' }), timeoutMs)
       ),
     ]);
 
-  // Execute all selected top sources in PARALLEL for maximum speed!
-  const results = await Promise.allSettled(targetSourceIds.map(sId => fetchWithTimeout(sId)));
+  // Execute sources in parallel chunks of 8 to prevent socket/thread starvation on backend
+  const chunkSize = 8;
+  const results: PromiseSettledResult<{ mangas: Manga[]; hasNextPage: boolean; error?: string }>[] = [];
+  for (let i = 0; i < targetSourceIds.length; i += chunkSize) {
+    const chunk = targetSourceIds.slice(i, i + chunkSize);
+    const chunkResults = await Promise.allSettled(chunk.map(sId => fetchWithTimeout(sId)));
+    results.push(...chunkResults);
+  }
 
   const combined: Manga[] = [];
   const sourceResultsCount: Record<string, number> = {};
@@ -563,19 +571,22 @@ export async function searchMultiSource(
     }
   }
 
-  // Prioritize dedicated full-chapter sources before MangaDex when deduplicating titles
+  // Prioritize dedicated full-chapter sources before MangaDex when sorting titles
   combined.sort((a, b) => {
     const aIsMangaDex = a.sourceId === '2499283573021220255' ? 1 : 0;
     const bIsMangaDex = b.sourceId === '2499283573021220255' ? 1 : 0;
     return aIsMangaDex - bIsMangaDex;
   });
 
-  const seenTitles = new Set<string>();
+  const seenKeys = new Set<string>();
+  const isSearchQuery = Boolean(queryText.trim());
   const deduplicated = combined.filter(m => {
     if (!isSourceEnabled(m.sourceId, m.sourceName)) return false;
     const norm = m.title.toLowerCase().trim();
-    if (seenTitles.has(norm)) return false;
-    seenTitles.add(norm);
+    // Key by sourceId + title for title search queries so every extension source is included
+    const key = isSearchQuery ? `${m.sourceId}_${norm}` : norm;
+    if (seenKeys.has(key)) return false;
+    seenKeys.add(key);
     return true;
   });
 
@@ -1123,11 +1134,13 @@ export function getFallbackManga(mangaId: string | number): Manga | null {
 
 export async function getChapterPages(chapterId: number | string, forceRefresh: boolean = false): Promise<string[]> {
   const numericId = typeof chapterId === 'string' ? parseInt(chapterId, 10) : chapterId;
+  if (isNaN(numericId)) return [];
+
   const cacheKey = `chapter_pages_${numericId}`;
 
   if (!forceRefresh) {
     const cached = getCachedData<string[]>(cacheKey);
-    if (cached && cached.length > 0) return cached;
+    if (cached && Array.isArray(cached) && cached.length > 0) return cached;
   }
 
   const mutation = `
@@ -1139,9 +1152,20 @@ export async function getChapterPages(chapterId: number | string, forceRefresh: 
   `;
 
   try {
-    const res = await queryGraphQL(mutation, { chapterId: numericId });
-    const pages: string[] = res?.data?.fetchChapterPages?.pages || [];
-    const formattedPages = pages.map(p => getImageUrl(p));
+    let res = await queryGraphQL(mutation, { chapterId: numericId });
+    let pages: string[] = res?.data?.fetchChapterPages?.pages || [];
+    
+    // Retry up to 2 times if pages return empty on initial request (extension live scraping)
+    if (pages.length === 0) {
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        await new Promise(r => setTimeout(r, 800 * attempt));
+        res = await queryGraphQL(mutation, { chapterId: numericId });
+        pages = res?.data?.fetchChapterPages?.pages || [];
+        if (pages.length > 0) break;
+      }
+    }
+
+    const formattedPages = pages.map(p => getImageUrl(p)).filter(Boolean);
     
     if (formattedPages.length > 0) {
       setCachedData(cacheKey, formattedPages, 60);
@@ -1150,11 +1174,11 @@ export async function getChapterPages(chapterId: number | string, forceRefresh: 
 
     // Fallback to cache if response empty (e.g. offline)
     const cachedFallback = getCachedData<string[]>(cacheKey);
-    return cachedFallback || [];
+    return (cachedFallback && Array.isArray(cachedFallback) && cachedFallback.length > 0) ? cachedFallback : [];
   } catch (e) {
     console.error('Failed to get chapter pages:', e);
     const cachedFallback = getCachedData<string[]>(cacheKey);
-    return cachedFallback || [];
+    return (cachedFallback && Array.isArray(cachedFallback) && cachedFallback.length > 0) ? cachedFallback : [];
   }
 }
 

@@ -9,12 +9,14 @@ import { formatTimeAgo } from '../utils/dateUtils';
 import { MangaListItem } from '../components/MangaListItem';
 import { ContentLanguageModal } from '../components/ContentLanguageModal';
 import { MangaInfoModal } from '../components/MangaInfoModal';
+import { useScrollDrag } from '../hooks/useScrollDrag';
 import { SlidersHorizontal, ChevronDown, RefreshCw, Compass, Loader2, Search, Play, Sparkles, BookOpen, Clock, X, Send, MessageSquare } from 'lucide-react';
 
 const HOME_CACHE_KEY = 'home_catalog_v5';
 
 export const DiscoverPage: React.FC = () => {
   const navigate = useNavigate();
+  const continueReadingRef = useScrollDrag<HTMLDivElement>();
   const [popularManga, setPopularManga] = useState<Manga[]>([]);
   const [recentlyAdded, setRecentlyAdded] = useState<Manga[]>([]);
   const [recentlyUpdated, setRecentlyUpdated] = useState<Manga[]>([]);
@@ -415,7 +417,7 @@ export const DiscoverPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="flex gap-3.5 overflow-x-auto pb-2 scrollbar-none snap-x">
+          <div ref={continueReadingRef} className="flex gap-3.5 overflow-x-auto pb-2 scrollbar-none snap-x cursor-grab active:cursor-grabbing">
             {continueReading.map((item) => {
               const progressPct = item.pageIndex && item.totalPages ? (item.pageIndex / item.totalPages) * 100 : 50;
               return (

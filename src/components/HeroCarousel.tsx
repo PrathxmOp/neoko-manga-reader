@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Manga } from '../types/manga';
-import { Flame, Star, BookOpen, BookmarkCheck, BookmarkPlus } from 'lucide-react';
+import { Flame, Star, BookOpen, BookmarkCheck, BookmarkPlus, ChevronLeft, ChevronRight } from 'lucide-react';
 import { isBookmarked, saveBookmark, removeBookmark } from '../services/storage';
+import { useSwipeGesture } from '../hooks/useSwipeGesture';
 
 interface HeroCarouselProps {
   items: Manga[];
@@ -12,14 +13,34 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
   const navigate = useNavigate();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [bookmarkedMap, setBookmarkedMap] = useState<Record<string, boolean>>({});
+  const [isPaused, setIsPaused] = useState(false);
+
+  const handleNext = () => {
+    if (!items || items.length === 0) return;
+    setCurrentIndex(prev => (prev + 1) % items.length);
+  };
+
+  const handlePrev = () => {
+    if (!items || items.length === 0) return;
+    setCurrentIndex(prev => (prev - 1 + items.length) % items.length);
+  };
+
+  const { ref, isDragging, deltaX } = useSwipeGesture<HTMLDivElement>({
+    threshold: 40,
+    velocityThreshold: 0.25,
+    preventScroll: true,
+    direction: 'horizontal',
+    onSwipeLeft: handleNext,
+    onSwipeRight: handlePrev,
+  });
 
   useEffect(() => {
-    if (!items || items.length === 0) return;
+    if (!items || items.length === 0 || isPaused || isDragging) return;
     const interval = setInterval(() => {
-      setCurrentIndex(prev => (prev + 1) % items.length);
+      handleNext();
     }, 6000);
     return () => clearInterval(interval);
-  }, [items]);
+  }, [items, isPaused, isDragging]);
 
   useEffect(() => {
     const map: Record<string, boolean> = {};
@@ -50,22 +71,34 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
     : (currentItem.genre?.split(',') || ['Action', 'Fantasy', 'Supernatural']);
 
   return (
-    <section className="w-full relative">
+    <section 
+      className="w-full relative select-none"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+    >
       <div 
-        onClick={() => navigate(`/manga/${currentItem.id}`)}
-        className="relative w-full rounded-2xl overflow-hidden bg-surface-container shadow-2xl border border-surface-container-high cursor-pointer group transition-all duration-500"
+        ref={ref}
+        onClick={(e) => {
+          if (Math.abs(deltaX) > 10) return; // ignore click if dragged
+          navigate(`/manga/${currentItem.id}`);
+        }}
+        style={{
+          transform: isDragging ? `translateX(${deltaX * 0.75}px) scale(0.99)` : 'translateX(0px) scale(1)',
+          transition: isDragging ? 'none' : 'transform 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+        className="relative w-full rounded-2xl overflow-hidden bg-surface-container shadow-2xl border border-surface-container-high cursor-pointer group transition-all duration-500 touch-pan-y"
       >
         {/* Artwork Image Container */}
         <div className="relative w-full h-80 sm:h-96 overflow-hidden">
           <img
             src={currentItem.thumbnailUrl || 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=1200&q=80'}
             alt={currentItem.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none"
           />
 
           {/* Gradients */}
-          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent" />
-          <div className="absolute inset-0 bg-gradient-to-r from-surface/90 via-surface/30 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/60 to-transparent pointer-events-none" />
+          <div className="absolute inset-0 bg-gradient-to-r from-surface/90 via-surface/30 to-transparent pointer-events-none" />
         </div>
 
         {/* Content Overlay */}
@@ -133,6 +166,29 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
             </div>
           </div>
         </div>
+
+        {/* Floating Navigation Controls (Desktop hover & mobile drag visual) */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handlePrev();
+          }}
+          className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md text-on-surface opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 transition-all hidden sm:flex items-center justify-center border border-white/10 z-20 shadow-md"
+          aria-label="Previous Slide"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleNext();
+          }}
+          className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-surface-container-lowest/80 backdrop-blur-md text-on-surface opacity-0 group-hover:opacity-100 hover:scale-110 active:scale-95 transition-all hidden sm:flex items-center justify-center border border-white/10 z-20 shadow-md"
+          aria-label="Next Slide"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Carousel Dots */}
@@ -152,3 +208,4 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
     </section>
   );
 };
+

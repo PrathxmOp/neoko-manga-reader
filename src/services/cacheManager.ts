@@ -1,5 +1,31 @@
 // 512MB Intelligent Fail-Safe Cache Manager for NEOKO Manga Web App
 
+// Purge legacy SW graphql cache, unregister old SWs, and clear old chapter page cache entries
+if (typeof window !== 'undefined') {
+  try {
+    Object.keys(localStorage).forEach(key => {
+      if (key.includes('chapter_pages_')) {
+        localStorage.removeItem(key);
+      }
+    });
+  } catch {}
+
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      for (const reg of registrations) {
+        reg.unregister().catch(() => {});
+      }
+    }).catch(() => {});
+  }
+  if ('caches' in window) {
+    caches.keys().then(names => {
+      for (const name of names) {
+        caches.delete(name).catch(() => {});
+      }
+    }).catch(() => {});
+  }
+}
+
 const CACHE_LIMIT_BYTES = 512 * 1024 * 1024; // 512 MB
 const INDEX_KEY = 'neoko_cache_index_v1';
 

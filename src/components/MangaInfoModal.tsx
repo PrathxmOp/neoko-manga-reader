@@ -6,6 +6,7 @@ import { getMangaDetails, getSourceName, getImageUrl, normalizeMangaStatus, clea
 import { fetchAniListRating, AniListMangaData } from '../services/anilistApi';
 import { getComicType, getComicTypeColor } from '../utils/mangaType';
 import { useBodyScrollLock } from '../hooks/useBodyScrollLock';
+import { useSwipeDismiss } from '../hooks/useSwipeDismiss';
 import { X, Play, BookmarkCheck, BookmarkPlus, ExternalLink, Star, BookOpen, Clock, Loader2, Globe, ChevronRight } from 'lucide-react';
 
 interface MangaInfoModalProps {
@@ -22,6 +23,11 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
   const [details, setDetails] = useState<Manga | null>(null);
   const [loading, setLoading] = useState(false);
   const [aniListData, setAniListData] = useState<AniListMangaData | null>(null);
+
+  const { ref: dismissRef, offsetY, isDragging } = useSwipeDismiss<HTMLDivElement>({
+    onDismiss: onClose,
+    enabled: isOpen,
+  });
 
   useEffect(() => {
     if (!manga || !isOpen) return;
@@ -115,10 +121,17 @@ export const MangaInfoModal: React.FC<MangaInfoModalProps> = ({ manga, isOpen, o
       <div className="absolute inset-0" onClick={onClose} />
 
       {/* Modal Container Sheet */}
-      <div className="relative w-full max-w-lg bg-[#141126] border-t sm:border border-[#2b2746] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-slide-up sm:animate-scale-up max-h-[78vh] sm:max-h-[85vh] my-0 sm:my-auto">
+      <div 
+        ref={dismissRef}
+        style={{
+          transform: offsetY > 0 ? `translateY(${offsetY}px)` : 'none',
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+        className="relative w-full max-w-lg bg-[#141126] border-t sm:border border-[#2b2746] rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden flex flex-col z-10 animate-slide-up sm:animate-scale-up max-h-[78vh] sm:max-h-[85vh] my-0 sm:my-auto touch-pan-y"
+      >
         
-        {/* Drag handle pill at top center (as seen in screenshot) */}
-        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] mx-auto mt-2.5 shrink-0" />
+        {/* Drag handle pill at top center */}
+        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] active:bg-primary/70 mx-auto mt-2.5 shrink-0 cursor-grab active:cursor-grabbing" />
 
         {/* Close Button */}
         <button

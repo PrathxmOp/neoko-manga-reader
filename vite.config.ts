@@ -32,6 +32,8 @@ export default defineConfig({
         ]
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         navigationPreload: true,
         cleanupOutdatedCaches: true,
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
@@ -65,30 +67,13 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /\/api\/v1\/chapter\/.*\/page\/.*/i,
+            urlPattern: /\/api\/v1\/(?:manga\/[^\/]+\/)?chapter\/.*\/page\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'manga-pages-cache',
               expiration: {
                 maxEntries: 1000,
                 maxAgeSeconds: 60 * 60 * 24 * 30 // 30 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /\/api\/graphql/i,
-            handler: 'StaleWhileRevalidate',
-            options: {
-              cacheName: 'graphql-api-cache',
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 7 // 7 Days
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
               }
             }
           }

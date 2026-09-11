@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrackerInfo, TrackRecord, TrackSearchResult, Manga } from '../types/manga';
 import { getTrackers, getMangaTrackRecords, searchTracker, bindTrack, unbindTrack, updateTrack, trackProgress } from '../services/suwayomiApi';
+import { useSwipeDismiss } from '../hooks/useSwipeDismiss';
 import { X as XIcon, Search as SearchIcon, ExternalLink as ExternalLinkIcon, Trash2 as TrashIcon, CheckCircle2 as CheckIcon, Loader2 as LoaderIcon, Star as StarIcon, BookOpen as BookIcon, Link as LinkIcon } from 'lucide-react';
 
 interface TrackerModalProps {
@@ -27,6 +28,10 @@ export const TrackerModal: React.FC<TrackerModalProps> = ({ manga, onClose }) =>
   const [searchResults, setSearchResults] = useState<TrackSearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const { ref: dismissRef, offsetY, isDragging } = useSwipeDismiss<HTMLDivElement>({
+    onDismiss: onClose,
+  });
 
   useEffect(() => {
     loadData();
@@ -58,10 +63,10 @@ export const TrackerModal: React.FC<TrackerModalProps> = ({ manga, onClose }) =>
     if (!query.trim()) return;
     setSearching(true);
     try {
-      const res = await searchTracker(trackerId, query);
-      setSearchResults(res);
+      const results = await searchTracker(trackerId, query);
+      setSearchResults(results);
     } catch (e) {
-      console.error('Tracker search failed:', e);
+      console.error('Search failed:', e);
       setSearchResults([]);
     } finally {
       setSearching(false);
@@ -71,9 +76,9 @@ export const TrackerModal: React.FC<TrackerModalProps> = ({ manga, onClose }) =>
   const handleBind = async (trackerId: number, remoteId: string) => {
     setActionLoading(`bind-${trackerId}`);
     try {
-      await bindTrack(manga.id, trackerId, remoteId);
-      await loadData();
+      await bindTrack(manga.id, trackerId, String(remoteId));
       setActiveBindingTrackerId(null);
+      await loadData();
     } catch (e) {
       console.error('Failed to bind track:', e);
     } finally {
@@ -126,9 +131,17 @@ export const TrackerModal: React.FC<TrackerModalProps> = ({ manga, onClose }) =>
       onClick={onClose}
     >
       <div
-        className="w-full max-w-lg bg-[#161327] border border-[#2b2746] rounded-2xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+        ref={dismissRef}
+        style={{
+          transform: offsetY > 0 ? `translateY(${offsetY}px)` : 'none',
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+        className="w-full max-w-lg bg-[#161327] border border-[#2b2746] rounded-2xl flex flex-col max-h-[85vh] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 touch-pan-y"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Drag handle pill */}
+        <div className="w-12 h-1.5 rounded-full bg-[#2b2746] mx-auto mt-2 shrink-0 cursor-grab active:cursor-grabbing" />
+
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#2b2746] flex items-center justify-between bg-[#120f23]">
           <div className="flex items-center gap-2.5">
