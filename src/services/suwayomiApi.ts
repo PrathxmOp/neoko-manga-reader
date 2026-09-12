@@ -527,8 +527,8 @@ export async function searchMultiSource(
     if (cached && cached.mangas && cached.mangas.length > 0) return cached;
   }
 
-  // Set fast 2s timeout for catalog browse and 6s for explicit title search
-  const timeoutMs = queryText.trim() ? 6000 : 2000;
+  // Set fast 1.5s timeout for home catalog browse and 6s for explicit title search
+  const timeoutMs = queryText.trim() ? 6000 : 1500;
 
   const fetchWithTimeout = (sId: string) =>
     Promise.race([
@@ -546,7 +546,7 @@ export async function searchMultiSource(
     const chunkResults = await Promise.allSettled(chunk.map(sId => fetchWithTimeout(sId)));
     results.push(...chunkResults);
 
-    // For home catalog browse (no search query), if we already got 8+ items from top sources, early exit to avoid waiting for slow tail sources
+    // For home catalog browse (no search query), if we already got 6+ items from top sources, early exit to avoid waiting for slow tail sources
     if (!queryText.trim() && i + chunkSize < targetSourceIds.length) {
       let currentItemsCount = 0;
       chunkResults.forEach(r => {
@@ -554,7 +554,7 @@ export async function searchMultiSource(
           currentItemsCount += r.value.mangas.length;
         }
       });
-      if (currentItemsCount >= 8) {
+      if (currentItemsCount >= 6) {
         break;
       }
     }

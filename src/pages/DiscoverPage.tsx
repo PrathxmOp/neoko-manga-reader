@@ -93,35 +93,6 @@ export const DiscoverPage: React.FC = () => {
 
   const observerTarget = useRef<HTMLDivElement>(null);
 
-  const isFastHydrated = useRef(false);
-
-  const hydrateFastHomeCatalog = async () => {
-    try {
-      const aniRes = await searchAniList('', 1, 24);
-      if (aniRes.mangas && aniRes.mangas.length > 0) {
-        const pop = aniRes.mangas.slice(0, 8);
-        const added = aniRes.mangas.slice(8, 14);
-        const updated = aniRes.mangas.slice(2, 10);
-        const extra = aniRes.mangas.slice(14);
-        setPopularManga(pop);
-        setRecentlyAdded(added);
-        setRecentlyUpdated(updated);
-        setExtraCatalog(extra);
-        setLoading(false);
-        isFastHydrated.current = true;
-        return;
-      }
-    } catch (e) {
-      console.warn('Fast AniList hydration fallback:', e);
-    }
-    const demos = getDemoMangas();
-    setPopularManga(demos);
-    setRecentlyAdded(demos.slice(2, 6));
-    setRecentlyUpdated(demos);
-    setLoading(false);
-    isFastHydrated.current = true;
-  };
-
   useEffect(() => {
     document.title = 'NEOKO — Discover Manga';
     // Hydrate Continue Reading items
@@ -137,10 +108,8 @@ export const DiscoverPage: React.FC = () => {
       // Quiet background refresh without blocking screen
       loadMangaCatalog(false, false);
     } else {
-      // Instant zero-delay hydration (< 200ms) for first-time users, followed by background Suwayomi sync
-      hydrateFastHomeCatalog().then(() => {
-        loadMangaCatalog(false, false);
-      });
+      // First time launch: show modern loading skeletons and fetch directly from active extensions (~300ms)
+      loadMangaCatalog(false, true);
     }
 
     const handleFilterChange = () => {
@@ -232,51 +201,18 @@ export const DiscoverPage: React.FC = () => {
       const extraFromSources = popCatalog.slice(14);
 
       if (pop.length > 0) {
-        if (isFastHydrated.current && !forceRefresh) {
-          // Smoothly enrich existing fast-hydrated catalog without triggering a jarring double re-render/flash
-          setPopularManga(prev => {
-            const mergedMap = new Map<string, Manga>();
-            prev.forEach(m => mergedMap.set(m.title.toLowerCase().trim(), m));
-            pop.forEach(m => {
-              const norm = m.title.toLowerCase().trim();
-              if (mergedMap.has(norm)) {
-                const existing = mergedMap.get(norm)!;
-                mergedMap.set(norm, {
-                  ...existing,
-                  sourceId: m.sourceId,
-                  sourceName: m.sourceName,
-                  chapterCount: m.chapterCount || existing.chapterCount
-                });
-              }
-            });
-            return Array.from(mergedMap.values());
-          });
-
-          setRecentlyUpdated(updated);
-          if (extraFromSources.length > 0) {
-            setExtraCatalog(prev => {
-              const existingSet = new Set(prev.map(m => m.title.toLowerCase().trim()));
-              const uniqueExtra = extraFromSources.filter(m => !existingSet.has(m.title.toLowerCase().trim()));
-              return [...prev, ...uniqueExtra];
-            });
-          }
-          setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
-        } else {
-          setPopularManga(pop);
-          setRecentlyAdded(added);
-          setRecentlyUpdated(updated);
-          if (extraFromSources.length > 0) {
-            setExtraCatalog(extraFromSources);
-          }
-          setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
+        setPopularManga(pop);
+        setRecentlyAdded(added);
+        setRecentlyUpdated(updated);
+        if (extraFromSources.length > 0) {
+          setExtraCatalog(extraFromSources);
         }
+        setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
       } else {
-        if (popularManga.length === 0) {
-          const demos = getDemoMangas();
-          setPopularManga(demos);
-          setRecentlyAdded(demos.slice(2, 6));
-          setRecentlyUpdated(demos);
-        }
+        const demos = getDemoMangas();
+        setPopularManga(demos);
+        setRecentlyAdded(demos.slice(2, 6));
+        setRecentlyUpdated(demos);
       }
     } catch (e) {
       console.error(e);
@@ -496,9 +432,24 @@ export const DiscoverPage: React.FC = () => {
       </a>
 
       {/* Hero Carousel */}
-      {filteredPopular.length > 0 && (
+      {loading ? (
+        <div className="w-full h-80 sm:h-96 rounded-2xl bg-[#161327] border border-[#2b2746] animate-pulse p-4 sm:p-6 flex flex-col justify-between shadow-2xl relative overflow-hidden">
+          <div className="flex justify-between items-center z-10">
+            <div className="h-6 w-32 bg-[#2b2746] rounded-full" />
+            <div className="h-6 w-16 bg-[#2b2746] rounded-full" />
+          </div>
+          <div className="space-y-3 z-10">
+            <div className="h-4 w-48 bg-[#2b2746] rounded-full" />
+            <div className="h-8 sm:h-10 w-3/4 bg-[#231f3d] rounded-xl" />
+            <div className="flex items-center gap-3 pt-2">
+              <div className="h-11 flex-1 bg-[#9d86e9]/20 rounded-xl" />
+              <div className="h-11 w-11 bg-[#2b2746] rounded-xl" />
+            </div>
+          </div>
+        </div>
+      ) : filteredPopular.length > 0 ? (
         <HeroCarousel items={filteredPopular.slice(0, 6)} />
-      )}
+      ) : null}
 
       {/* 1. Continue Reading Row */}
       {continueReading.length > 0 && (
