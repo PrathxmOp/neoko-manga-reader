@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { Manga, Chapter, BookmarkItem, Source } from '../types/manga';
 import { getMangaDetails, updateMangaInLibrary, normalizeMangaStatus, cleanSynopsisText, autoBindTrackers, resolveMangaFromSourceByTitle, getSourceName, searchMultiSource, getImageUrl, getSources } from '../services/suwayomiApi';
 import { fetchAniListRating, AniListMangaData } from '../services/anilistApi';
-import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters, markAllChaptersRead, markAllChaptersUnread } from '../services/storage';
+import { isBookmarked, saveBookmark, removeBookmark, getHistory, getBookmarkCategory, getReadChapters, markAllChaptersRead, markAllChaptersUnread, getMangaResumeTarget } from '../services/storage';
 import { useToast } from '../contexts/ToastContext';
 import { ChapterItem } from '../components/ChapterItem';
 import { 
@@ -203,6 +203,33 @@ export const MangaDetailPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    const updateHistory = () => {
+      if (!manga) return;
+      const history = getHistory();
+      const found = history.find(h => String(h.mangaId) === String(manga.id));
+      if (found) {
+        setLastReadChapterId(found.chapterId);
+        setLastReadPage(found.pageIndex || 1);
+      }
+    };
+
+    window.addEventListener('neoko_history_changed', updateHistory);
+    window.addEventListener('focus', updateHistory);
+    return () => {
+      window.removeEventListener('neoko_history_changed', updateHistory);
+      window.removeEventListener('focus', updateHistory);
+    };
+  }, [manga]);
+
+  const handleResumeClick = () => {
+    if (!manga) return;
+    const target = getMangaResumeTarget(manga.id, manga.chapters || []);
+    if (target) {
+      navigate(`/read/${target.chapterId}?page=${target.pageIndex}`);
+    }
+  };
+
   const executeSourceSearch = async (queryToSearch: string, forceRefresh: boolean = false) => {
     if (!queryToSearch.trim()) return;
     setSourceSearchLoading(true);
@@ -331,8 +358,9 @@ export const MangaDetailPage: React.FC = () => {
   const chapters = manga.chapters || [];
   const sortedAscending = [...chapters].sort((a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0));
   const firstChapter = sortedAscending.length > 0 ? sortedAscending[0] : null;
-  const targetChapter = lastReadChapterId 
-    ? chapters.find(c => String(c.id) === String(lastReadChapterId)) || firstChapter 
+  const resumeTarget = getMangaResumeTarget(manga.id, chapters);
+  const targetChapter = resumeTarget
+    ? chapters.find(c => String(c.id) === String(resumeTarget.chapterId)) || firstChapter
     : firstChapter;
 
   const filteredChapters = chapters
@@ -545,11 +573,17 @@ export const MangaDetailPage: React.FC = () => {
               <div className="grid grid-cols-12 gap-3 mt-4">
                 {targetChapter ? (
                   <button
-                    onClick={() => navigate(`/read/${targetChapter.id}?page=${lastReadPage}`)}
+                    onClick={handleResumeClick}
                     className="col-span-7 sm:col-span-6 bg-[#9d86e9] hover:bg-[#8b70e5] text-[#0c0c14] font-display font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-lg shadow-[#9d86e9]/25 transition-all active:scale-98 cursor-pointer"
                   >
                     <Play className="w-4 h-4 fill-current" />
-                    <span>{lastReadChapterId ? 'Resume Ch.' : 'Read Ch. 1'}</span>
+                    <span>
+                      {resumeTarget
+                        ? (resumeTarget.pageIndex > 1
+                            ? `Resume Ch. ${resumeTarget.chapterNumber ?? targetChapter.chapterNumber ?? ''} (P. ${resumeTarget.pageIndex})`
+                            : `Read Ch. ${resumeTarget.chapterNumber ?? targetChapter.chapterNumber ?? ''}`)
+                        : 'Read Ch. 1'}
+                    </span>
                   </button>
                 ) : (
                   <button

@@ -1,4 +1,4 @@
-import { BookmarkItem, HistoryItem, Manga, ReaderSettings, ContentFilterSettings, AppSettings, UserProfile, ReadingStats, MangaCollection, ChapterNote } from '../types/manga';
+import { BookmarkItem, HistoryItem, Manga, ReaderSettings, ContentFilterSettings, AppSettings, UserProfile, ReadingStats, MangaCollection, ChapterNote, Chapter } from '../types/manga';
 import { isDefault18Plus } from '../config/extensionRules';
 
 const BOOKMARKS_KEY = 'neoko_manga_bookmarks';
@@ -869,6 +869,74 @@ export function getContinueReadingList(): HistoryItem[] {
     }
   });
   return Array.from(map.values()).slice(0, 10);
+}
+
+export interface ResumeTarget {
+  chapterId: string | number;
+  pageIndex: number;
+  pageOffsetRatio?: number;
+  chapterName?: string;
+  chapterNumber?: number;
+  isCompleted?: boolean;
+}
+
+export function getMangaResumeTarget(
+  mangaId: string | number,
+  chapters: Chapter[] = []
+): ResumeTarget | null {
+  const history = getHistory();
+  const historyItem = history.find(h => String(h.mangaId) === String(mangaId));
+
+  const sortedChapters = [...chapters].sort((a, b) => (a.chapterNumber ?? 0) - (b.chapterNumber ?? 0));
+
+  if (historyItem) {
+    const chIdx = sortedChapters.findIndex(c => String(c.id) === String(historyItem.chapterId));
+    const ch = chIdx !== -1 ? sortedChapters[chIdx] : null;
+
+    return {
+      chapterId: historyItem.chapterId,
+      pageIndex: historyItem.pageIndex || 1,
+      pageOffsetRatio: historyItem.pageOffsetRatio || 0,
+      chapterName: historyItem.chapterName,
+      chapterNumber: ch?.chapterNumber,
+      isCompleted: false,
+    };
+  }
+
+  if (sortedChapters.length > 0) {
+    const inProgress = sortedChapters.find(c => Boolean(c.lastPageRead && c.lastPageRead > 0 && !(c.read || c.isRead || isChapterRead(c.id))));
+    if (inProgress) {
+      return {
+        chapterId: inProgress.id,
+        pageIndex: inProgress.lastPageRead || 1,
+        chapterName: inProgress.name,
+        chapterNumber: inProgress.chapterNumber,
+        isCompleted: false,
+      };
+    }
+
+    const firstUnread = sortedChapters.find(c => !(c.read || c.isRead || isChapterRead(c.id)));
+    if (firstUnread) {
+      return {
+        chapterId: firstUnread.id,
+        pageIndex: 1,
+        chapterName: firstUnread.name,
+        chapterNumber: firstUnread.chapterNumber,
+        isCompleted: false,
+      };
+    }
+
+    const firstCh = sortedChapters[0];
+    return {
+      chapterId: firstCh.id,
+      pageIndex: 1,
+      chapterName: firstCh.name,
+      chapterNumber: firstCh.chapterNumber,
+      isCompleted: Boolean(firstCh.read || firstCh.isRead || isChapterRead(firstCh.id)),
+    };
+  }
+
+  return null;
 }
 
 export function getTopGenres(): { genre: string; count: number }[] {

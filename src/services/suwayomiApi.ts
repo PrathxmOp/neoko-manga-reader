@@ -1527,19 +1527,22 @@ export async function updateCategoryName(categoryId: number, name: string): Prom
 
 export async function getTrackers(): Promise<TrackerInfo[]> {
   try {
-    const res = await queryGraphQL('{ trackers { nodes { id name icon isLoggedIn isTokenExpired authUrl trackRecords { totalCount } } } }');
+    const res = await queryGraphQL(
+      '{ trackers { nodes { id name icon isLoggedIn isTokenExpired authUrl supportsPrivateTracking supportsReadingDates supportsTrackDeletion scores statuses { name value } trackRecords { totalCount } } } }'
+    );
     const nodes = res?.data?.trackers?.nodes || [];
-    const filteredNodes = nodes.filter((t: any) => {
-      const lower = (t.name || '').toLowerCase();
-      return lower.includes('myanimelist') || lower.includes('anilist');
-    });
-    return filteredNodes.map((t: any) => ({
+    return nodes.map((t: any) => ({
       id: t.id,
       name: t.name,
       icon: getImageUrl(t.icon),
       isLoggedIn: t.isLoggedIn,
       isTokenExpired: t.isTokenExpired,
       authUrl: t.authUrl,
+      supportsPrivateTracking: t.supportsPrivateTracking ?? false,
+      supportsReadingDates: t.supportsReadingDates ?? false,
+      supportsTrackDeletion: t.supportsTrackDeletion ?? false,
+      scores: t.scores || [],
+      statuses: t.statuses || [],
       trackRecords: t.trackRecords || { totalCount: 0 },
     }));
   } catch { return []; }
@@ -1580,7 +1583,7 @@ export async function getMangaTrackRecords(mangaId: number | string): Promise<Tr
     const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
     if (isNaN(numericId)) return [];
     const res = await queryGraphQL(
-      'query ($id: Int!) { manga(id: $id) { trackRecords { nodes { id trackerId remoteId status score lastChapterRead totalChapters remoteUrl startDate finishDate } } } }',
+      'query ($id: Int!) { manga(id: $id) { trackRecords { nodes { id trackerId remoteId status score displayScore lastChapterRead totalChapters remoteUrl startDate finishDate private } } } }',
       { id: numericId }
     );
     return res?.data?.manga?.trackRecords?.nodes || [];
@@ -1590,7 +1593,7 @@ export async function getMangaTrackRecords(mangaId: number | string): Promise<Tr
 export async function searchTracker(trackerId: number, query: string): Promise<TrackSearchResult[]> {
   try {
     const res = await queryGraphQL(
-      'query ($tId: Int!, $q: String!) { searchTracker(input: { trackerId: $tId, query: $q }) { trackSearches { id trackerId remoteId title coverUrl summary totalChapters status score lastChapterRead trackingUrl } } }',
+      'query ($tId: Int!, $q: String!) { searchTracker(input: { trackerId: $tId, query: $q }) { trackSearches { id trackerId remoteId title coverUrl summary totalChapters status score displayScore lastChapterRead trackingUrl } } }',
       { tId: trackerId, q: query }
     );
     return res?.data?.searchTracker?.trackSearches || [];
@@ -1602,7 +1605,7 @@ export async function bindTrack(mangaId: number | string, trackerId: number, rem
     const numericId = typeof mangaId === 'number' ? mangaId : parseInt(mangaId, 10);
     if (isNaN(numericId)) return null;
     const res = await queryGraphQL(
-      'mutation ($mId: Int!, $tId: Int!, $rId: LongString!) { bindTrack(input: { mangaId: $mId, trackerId: $tId, remoteId: $rId }) { trackRecord { id trackerId remoteId status score lastChapterRead totalChapters remoteUrl } } }',
+      'mutation ($mId: Int!, $tId: Int!, $rId: LongString!) { bindTrack(input: { mangaId: $mId, trackerId: $tId, remoteId: $rId }) { trackRecord { id trackerId remoteId status score displayScore lastChapterRead totalChapters remoteUrl private } } }',
       { mId: numericId, tId: trackerId, rId: String(remoteId) }
     );
     const rec = res?.data?.bindTrack?.trackRecord || null;
@@ -1624,16 +1627,33 @@ export async function unbindTrack(recordId: number): Promise<boolean> {
   } catch { return false; }
 }
 
-export async function updateTrack(recordId: number, status?: number, score?: number, lastChapterRead?: number): Promise<boolean> {
+export async function fetchTrack(recordId: number): Promise<TrackRecord | null> {
   try {
-    const patch: any = { recordId };
-    if (status !== undefined) patch.status = status;
-    if (score !== undefined) patch.scoreString = String(score);
-    if (lastChapterRead !== undefined) patch.lastChapterRead = lastChapterRead;
+    const res = await queryGraphQL(
+      'mutation ($recId: Int!) { fetchTrack(input: { recordId: $recId }) { trackRecord { id trackerId remoteId status score displayScore lastChapterRead totalChapters remoteUrl startDate finishDate private } } }',
+      { recId: recordId }
+    );
+    return res?.data?.fetchTrack?.trackRecord || null;
+  } catch { return null; }
+}
+
+export async function updateTrack(
+  recordId: number,
+  status?: number,
+  score?: number | string,
+  lastChapterRead?: number,
+  privateStatus?: boolean
+): Promise<boolean> {
+  try {
+    const variables: Record<string, any> = { recId: recordId };
+    if (status !== undefined) variables.st = status;
+    if (score !== undefined && score !== null) variables.sc = String(score);
+    if (lastChapterRead !== undefined) variables.ch = lastChapterRead;
+    if (privateStatus !== undefined) variables.pr = privateStatus;
 
     await queryGraphQL(
-      'mutation ($recId: Int!, $st: Int, $sc: String, $ch: Float) { updateTrack(input: { recordId: $recId, status: $st, scoreString: $sc, lastChapterRead: $ch }) { trackRecord { id status score lastChapterRead } } }',
-      { recId: recordId, st: status, sc: score !== undefined ? String(score) : undefined, ch: lastChapterRead }
+      'mutation ($recId: Int!, $st: Int, $sc: String, $ch: Float, $pr: Boolean) { updateTrack(input: { recordId: $recId, status: $st, scoreString: $sc, lastChapterRead: $ch, private: $pr }) { trackRecord { id status score displayScore lastChapterRead private } } }',
+      variables
     );
     return true;
   } catch { return false; }
@@ -1672,13 +1692,13 @@ export async function autoBindTrackers(mangaId: number | string, mangaTitle: str
         const searchResults = await searchTracker(tracker.id, mangaTitle);
         if (searchResults && searchResults.length > 0) {
           const cleanMangaTitle = mangaTitle.toLowerCase().replace(/[^a-z0-9]/g, '');
+          // Only auto-bind if there is an exact or very strong title match
           const exactMatch = searchResults.find(r => {
             const cleanResultTitle = r.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-            return cleanResultTitle === cleanMangaTitle || cleanResultTitle.includes(cleanMangaTitle);
+            return cleanResultTitle === cleanMangaTitle;
           });
-          const targetResult = exactMatch || searchResults[0];
-          if (targetResult) {
-            await bindTrack(numericId, tracker.id, targetResult.remoteId);
+          if (exactMatch) {
+            await bindTrack(numericId, tracker.id, exactMatch.remoteId);
           }
         }
       }

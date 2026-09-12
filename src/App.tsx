@@ -11,17 +11,18 @@ import { WifiOff } from 'lucide-react';
 import { TopProgressBar } from './components/TopProgressBar';
 
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { lazyWithRetry } from './utils/lazyWithRetry';
 
-const DiscoverPage = React.lazy(() => import('./pages/DiscoverPage'));
-const SearchBrowsePage = React.lazy(() => import('./pages/SearchBrowsePage'));
-const MangaDetailPage = React.lazy(() => import('./pages/MangaDetailPage'));
-const ReaderPage = React.lazy(() => import('./pages/ReaderPage'));
-const LibraryPage = React.lazy(() => import('./pages/LibraryPage'));
-const UpdatesPage = React.lazy(() => import('./pages/UpdatesPage'));
-const SettingsPage = React.lazy(() => import('./pages/SettingsPage'));
-const StatsPage = React.lazy(() => import('./pages/StatsPage'));
-const CollectionsPage = React.lazy(() => import('./pages/CollectionsPage'));
-const NotFoundPage = React.lazy(() => import('./pages/NotFoundPage'));
+const DiscoverPage = lazyWithRetry(() => import('./pages/DiscoverPage'));
+const SearchBrowsePage = lazyWithRetry(() => import('./pages/SearchBrowsePage'));
+const MangaDetailPage = lazyWithRetry(() => import('./pages/MangaDetailPage'));
+const ReaderPage = lazyWithRetry(() => import('./pages/ReaderPage'));
+const LibraryPage = lazyWithRetry(() => import('./pages/LibraryPage'));
+const UpdatesPage = lazyWithRetry(() => import('./pages/UpdatesPage'));
+const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'));
+const StatsPage = lazyWithRetry(() => import('./pages/StatsPage'));
+const CollectionsPage = lazyWithRetry(() => import('./pages/CollectionsPage'));
+const NotFoundPage = lazyWithRetry(() => import('./pages/NotFoundPage'));
 
 const PageFallback: React.FC = () => (
   <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center animate-fade-in">

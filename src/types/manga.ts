@@ -79,6 +79,7 @@ export interface HistoryItem {
   readAt: number;
   sourceId?: string;
   pageIndex?: number;
+  pageOffsetRatio?: number;
   totalPages?: number;
 }
 
@@ -150,6 +151,11 @@ export interface UserProfile {
   createdAt: number;
 }
 
+export interface TrackerStatusOption {
+  name: string;
+  value: number;
+}
+
 export interface TrackerInfo {
   id: number;
   name: string;
@@ -157,6 +163,11 @@ export interface TrackerInfo {
   isLoggedIn: boolean;
   isTokenExpired: boolean;
   authUrl: string | null;
+  supportsPrivateTracking?: boolean;
+  supportsReadingDates?: boolean;
+  supportsTrackDeletion?: boolean;
+  scores?: string[];
+  statuses?: TrackerStatusOption[];
   trackRecords: { totalCount: number };
 }
 
@@ -165,13 +176,15 @@ export interface TrackRecord {
   trackerId: number;
   remoteId: string;
   title?: string;
-  status: number; // 1: Reading, 2: Completed, 3: On Hold, 4: Dropped, 6: Plan to Read
+  status: number;
   score: number;
+  displayScore?: string;
   lastChapterRead: number;
   totalChapters: number;
   remoteUrl?: string;
   startDate?: string;
   finishDate?: string;
+  private?: boolean;
 }
 
 export interface TrackSearchResult {
@@ -184,6 +197,7 @@ export interface TrackSearchResult {
   totalChapters: number;
   status: number;
   score: number;
+  displayScore?: string;
   lastChapterRead: number;
   trackingUrl?: string;
 }

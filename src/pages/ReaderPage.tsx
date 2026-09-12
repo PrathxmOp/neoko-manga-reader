@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { getChapterPages, getChapterDetails, getMangaDetails, fetchAuthenticatedImageBlob, Chapter, updateChapterRead, trackProgress, autoBindTrackers } from '../services/suwayomiApi';
 import { addHistoryItem, getHistory, getReaderSettings, saveReaderSettings, updateReadingStats, getChapterNotes, saveChapterNote, deleteChapterNote, getGeminiApiKey, getTranslationLanguage, getAiTranslationEnabled } from '../services/storage';
@@ -206,8 +206,67 @@ export const ReaderPage: React.FC = () => {
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitialScrollLock = useRef(true);
+  const hasUserInteractedRef = useRef(false);
+  const hasRestoredInitialScrollRef = useRef(false);
   const initialStartPageRef = useRef(1);
+  const initialPageOffsetRef = useRef(0);
+  const currentPageOffsetRef = useRef(0);
+  const currentPageRef = useRef(1);
   const isFirstChapterLoad = useRef(true);
+  const saveHistoryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Release initial scroll lock only on deliberate scroll gestures (drag > 25px, wheel > 15px, or arrow keys)
+  useEffect(() => {
+    let canDetectUserScroll = false;
+    const timer = setTimeout(() => {
+      canDetectUserScroll = true;
+    }, 600);
+
+    let startY = 0;
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length > 0) startY = e.touches[0].clientY;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!canDetectUserScroll || hasUserInteractedRef.current) return;
+      if (e.touches.length > 0) {
+        const deltaY = Math.abs(e.touches[0].clientY - startY);
+        if (deltaY > 25) {
+          hasUserInteractedRef.current = true;
+          isInitialScrollLock.current = false;
+        }
+      }
+    };
+
+    const handleWheel = (e: WheelEvent) => {
+      if (!canDetectUserScroll || hasUserInteractedRef.current) return;
+      if (Math.abs(e.deltaY) > 15) {
+        hasUserInteractedRef.current = true;
+        isInitialScrollLock.current = false;
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!canDetectUserScroll || hasUserInteractedRef.current) return;
+      if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown'].includes(e.key) || e.key === ' ') {
+        hasUserInteractedRef.current = true;
+        isInitialScrollLock.current = false;
+      }
+    };
+
+    window.addEventListener('touchstart', handleTouchStart, { passive: true });
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
+    window.addEventListener('wheel', handleWheel, { passive: true });
+    window.addEventListener('keydown', handleKeyDown, { passive: true });
+
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('touchstart', handleTouchStart);
+      window.removeEventListener('touchmove', handleTouchMove);
+      window.removeEventListener('wheel', handleWheel);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const lastTapRef = useRef<number>(0);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
@@ -431,6 +490,23 @@ export const ReaderPage: React.FC = () => {
   const [failedPages, setFailedPages] = useState<Set<number>>(new Set());
   const [pageRetryKeys, setPageRetryKeys] = useState<Record<number, number>>({});
 
+  const scrollToTargetPage = useCallback(() => {
+    if (hasUserInteractedRef.current) return;
+    const targetPage = initialStartPageRef.current;
+    const offsetRatio = initialPageOffsetRef.current || 0;
+    if (targetPage > 0) {
+      const el = document.getElementById(`reader-page-${targetPage}`);
+      if (el) {
+        const rect = el.getBoundingClientRect();
+        const elTop = rect.top + window.scrollY;
+        const targetScrollY = elTop + (rect.height * offsetRatio);
+        window.scrollTo({ top: targetScrollY, behavior: 'instant' as ScrollBehavior });
+      }
+    }
+  }, []);
+
+
+
   const handleImageLoad = (index: number) => {
     setLoadedPages(prev => {
       if (prev.has(index)) return prev;
@@ -442,10 +518,14 @@ export const ReaderPage: React.FC = () => {
     // Advance sequence index to allow next page (index + 1) to load in order
     setActiveSeqIndex(prev => Math.max(prev, index + 1));
 
-    if (isInitialScrollLock.current && settings.mode === 'webtoon' && initialStartPageRef.current > 1) {
-      const el = document.getElementById(`reader-page-${initialStartPageRef.current}`);
-      if (el) {
-        el.scrollIntoView({ behavior: 'auto', block: 'start' });
+    // Re-align scroll to target page when images above it load & expand, UNLESS user has interacted
+    if (settings.mode === 'webtoon' && !hasUserInteractedRef.current && initialStartPageRef.current > 1) {
+      if (index + 1 <= initialStartPageRef.current) {
+        requestAnimationFrame(() => {
+          if (!hasUserInteractedRef.current) {
+            scrollToTargetPage();
+          }
+        });
       }
     }
   };
@@ -559,8 +639,10 @@ export const ReaderPage: React.FC = () => {
     }
   }, [chapterDetails]);
 
-  // Continuously sync history progress & Suwayomi/Tracker read status whenever page changes
-  useEffect(() => {
+  const syncedChaptersRef = useRef<Set<string>>(new Set());
+
+  // Helper to sync history
+  const syncHistoryNow = useCallback((page: number, offsetRatio: number) => {
     if (pages.length > 0 && chapterDetails && chapterId) {
       addHistoryItem({
         mangaId: chapterDetails.mangaId || '1',
@@ -568,21 +650,56 @@ export const ReaderPage: React.FC = () => {
         thumbnailUrl: chapterDetails.thumbnailUrl,
         chapterId: chapterId,
         chapterName: chapterDetails.name || `Chapter ${chapterId}`,
-        pageIndex: currentPage,
+        pageIndex: page,
+        pageOffsetRatio: offsetRatio,
         totalPages: pages.length,
       });
+    }
+  }, [pages.length, chapterDetails, chapterId]);
+
+  // Flush exact reading position to history on component unmount (navigating back)
+  useEffect(() => {
+    return () => {
+      if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current);
+      if (pages.length > 0 && chapterDetails && chapterId && currentPageRef.current > 0) {
+        addHistoryItem({
+          mangaId: chapterDetails.mangaId || '1',
+          mangaTitle: chapterDetails.mangaTitle || 'Manga',
+          thumbnailUrl: chapterDetails.thumbnailUrl,
+          chapterId: chapterId,
+          chapterName: chapterDetails.name || `Chapter ${chapterId}`,
+          pageIndex: currentPageRef.current,
+          pageOffsetRatio: currentPageOffsetRef.current,
+          totalPages: pages.length,
+        });
+      }
+    };
+  }, [pages.length, chapterDetails, chapterId]);
+
+  // Sync initial history progress & Suwayomi read status on page change
+  useEffect(() => {
+    if (pages.length > 0 && chapterDetails && chapterId) {
+      currentPageRef.current = currentPage;
+      syncHistoryNow(currentPage, currentPageOffsetRef.current);
 
       // Mark chapter as read in Suwayomi DB & sync MAL/AniList when user reaches >70% or last page
       const numChapterId = parseInt(String(chapterId), 10);
+      const stringId = String(chapterId);
       if (!isNaN(numChapterId) && (currentPage >= Math.ceil(pages.length * 0.7) || currentPage === pages.length)) {
-        updateChapterRead(numChapterId, true).then(() => {
-          if (chapterDetails.mangaId) {
-            trackProgress(chapterDetails.mangaId);
-          }
-        }).catch(err => console.error('Failed to sync chapter read status to server:', err));
+        if (!syncedChaptersRef.current.has(stringId)) {
+          syncedChaptersRef.current.add(stringId);
+          updateChapterRead(numChapterId, true).then(() => {
+            if (chapterDetails.mangaId) {
+              trackProgress(chapterDetails.mangaId);
+            }
+          }).catch(err => {
+            syncedChaptersRef.current.delete(stringId);
+            console.error('Failed to sync chapter read status to server:', err);
+          });
+        }
       }
     }
-  }, [currentPage, pages.length, chapterId, chapterDetails]);
+  }, [currentPage, pages.length, chapterId, chapterDetails, syncHistoryNow]);
 
   const loadPages = async (id: string, forceRefresh: boolean = false) => {
     // Scroll to top immediately when loading a new chapter
@@ -610,12 +727,19 @@ export const ReaderPage: React.FC = () => {
       const historyItems = getHistory();
       const savedItem = historyItems.find(h => String(h.chapterId) === String(id));
       const urlPage = parseInt(searchParams.get('page') || '0', 10);
-      const rawStartPage = urlPage > 0 ? urlPage : (isFirstChapterLoad.current && savedItem?.pageIndex ? savedItem.pageIndex : 1);
+      const rawStartPage = isFirstChapterLoad.current
+        ? (urlPage > 0 ? urlPage : (savedItem?.pageIndex || 1))
+        : (urlPage > 0 ? urlPage : 1);
       isFirstChapterLoad.current = false;
       const startPage = pageUrls.length > 0 ? Math.max(1, Math.min(rawStartPage, pageUrls.length)) : 1;
       
       isInitialScrollLock.current = true;
+      hasUserInteractedRef.current = false;
+      hasRestoredInitialScrollRef.current = false;
       initialStartPageRef.current = startPage;
+      initialPageOffsetRef.current = (savedItem && (urlPage === 0 || urlPage === savedItem.pageIndex))
+        ? (savedItem.pageOffsetRatio || 0)
+        : 0;
       setCurrentPage(startPage);
 
       if (pageUrls.length > 0) {
@@ -667,6 +791,43 @@ export const ReaderPage: React.FC = () => {
       setLoading(false);
     }
   };
+
+  // Preload first 10 pages of the next chapter in the background for instant transitions
+  useEffect(() => {
+    if (!nextChapter || !nextChapter.id) return;
+    let isCancelled = false;
+
+    const preloadNextChapterPages = async () => {
+      try {
+        const nextChapterPages = await getChapterPages(String(nextChapter.id));
+        if (isCancelled || !nextChapterPages || nextChapterPages.length === 0) return;
+
+        // Preload first 10 pages into browser image cache
+        const pagesToPreload = nextChapterPages.slice(0, 10);
+
+        pagesToPreload.forEach((url, i) => {
+          if (isCancelled) return;
+          setTimeout(() => {
+            if (isCancelled) return;
+            const img = new Image();
+            img.src = url;
+          }, i * 120);
+        });
+      } catch (err) {
+        console.error('Failed to background preload next chapter:', err);
+      }
+    };
+
+    // Delay start of next chapter preloading so current chapter rendering finishes smoothly first
+    const timer = setTimeout(() => {
+      preloadNextChapterPages();
+    }, 1200);
+
+    return () => {
+      isCancelled = true;
+      clearTimeout(timer);
+    };
+  }, [nextChapter?.id]);
 
   const handleSaveNote = () => {
     if (!newNoteInput.trim() || !chapterDetails) return;
@@ -771,16 +932,30 @@ export const ReaderPage: React.FC = () => {
   const handleScroll = () => {
     if (isInitialScrollLock.current || settings.mode !== 'webtoon' || !containerRef.current || pages.length === 0) return;
     const elements = containerRef.current.querySelectorAll('.reader-page-img');
-    const scrollTop = window.scrollY + window.innerHeight / 2;
+    const viewportTop = window.scrollY;
 
-    elements.forEach((el, index) => {
+    for (let index = 0; index < elements.length; index++) {
+      const el = elements[index] as HTMLElement;
       const rect = el.getBoundingClientRect();
       const top = rect.top + window.scrollY;
       const bottom = top + rect.height;
-      if (scrollTop >= top && scrollTop <= bottom) {
-        setCurrentPage(index + 1);
+
+      if (viewportTop + 50 >= top && viewportTop + 50 <= bottom) {
+        const offsetInside = Math.max(0, viewportTop - top);
+        const ratio = rect.height > 0 ? Math.min(0.99, offsetInside / rect.height) : 0;
+        const pageNum = index + 1;
+
+        setCurrentPage(pageNum);
+        currentPageRef.current = pageNum;
+        currentPageOffsetRef.current = ratio;
+
+        if (saveHistoryTimerRef.current) clearTimeout(saveHistoryTimerRef.current);
+        saveHistoryTimerRef.current = setTimeout(() => {
+          syncHistoryNow(pageNum, ratio);
+        }, 300);
+        break;
       }
-    });
+    }
   };
 
   useEffect(() => {
@@ -788,39 +963,45 @@ export const ReaderPage: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, [settings.mode, pages]);
 
-  // Synchronize scroll position on initial load / chapter load
+  // Synchronize scroll position on initial load and whenever elements resize upon image loading
   useEffect(() => {
-    if (loading || pages.length === 0) return;
+    if (loading || pages.length === 0 || settings.mode !== 'webtoon') return;
 
-    const targetPage = initialStartPageRef.current;
-
-    if (settings.mode === 'webtoon') {
-      const scrollToTarget = () => {
-        if (targetPage > 1) {
-          const el = document.getElementById(`reader-page-${targetPage}`);
-          if (el) {
-            el.scrollIntoView({ behavior: 'auto', block: 'start' });
-          }
-        }
-      };
-
-      scrollToTarget();
-      const rafId = requestAnimationFrame(() => {
-        scrollToTarget();
-      });
-
-      const lockTimer = setTimeout(() => {
-        isInitialScrollLock.current = false;
-      }, 600);
-
-      return () => {
-        cancelAnimationFrame(rafId);
-        clearTimeout(lockTimer);
-      };
-    } else {
-      isInitialScrollLock.current = false;
+    if (!hasUserInteractedRef.current) {
+      scrollToTargetPage();
     }
-  }, [loading, pages.length, chapterId, settings.mode]);
+
+    let observer: ResizeObserver | null = null;
+    if (containerRef.current && typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(() => {
+        if (!hasUserInteractedRef.current) {
+          scrollToTargetPage();
+        }
+      });
+      observer.observe(containerRef.current);
+      const pageEls = containerRef.current.querySelectorAll('.reader-page-img');
+      pageEls.forEach(el => observer?.observe(el));
+    }
+
+    const t1 = setTimeout(() => {
+      if (!hasUserInteractedRef.current) scrollToTargetPage();
+    }, 50);
+    const t2 = setTimeout(() => {
+      if (!hasUserInteractedRef.current) scrollToTargetPage();
+    }, 200);
+
+    const unlockTimer = setTimeout(() => {
+      isInitialScrollLock.current = false;
+      hasRestoredInitialScrollRef.current = true;
+    }, 1000);
+
+    return () => {
+      if (observer) observer.disconnect();
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(unlockTimer);
+    };
+  }, [loading, pages.length, chapterId, settings.mode, scrollToTargetPage]);
 
   const handlePrevPage = () => {
     if (settings.mode === 'single' || settings.mode === 'double') {
@@ -1272,7 +1453,7 @@ export const ReaderPage: React.FC = () => {
                     originalUrl={url}
                     alt={`Page ${index + 1}`}
                     loading="lazy"
-                    canLoad={index <= activeSeqIndex || isLoaded}
+                    canLoad={index <= activeSeqIndex || isLoaded || Math.abs(index - (initialStartPageRef.current - 1)) <= 3}
                     retryTrigger={pageRetryKeys[index] || 0}
                     onLoad={handleImageLoad}
                     onError={(idx) => {

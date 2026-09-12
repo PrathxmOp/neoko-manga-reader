@@ -1016,18 +1016,22 @@ export const SettingsPage: React.FC = () => {
             {activeTab === 'tracking' && (
               <div className="space-y-4">
                 <SectionTitle title="Manga Trackers" />
-                <p className="font-sans text-xs text-outline">Connect your MyAnimeList and AniList accounts to automatically sync reading progress across devices.</p>
+                <p className="font-sans text-xs text-outline">Connect your MyAnimeList, AniList, Kitsu or MangaUpdates accounts to automatically sync reading progress across services.</p>
                 <div className="space-y-3">
                   {trackers.map(tracker => (
                     <div key={tracker.id} className={`p-4 rounded-2xl border flex items-center justify-between gap-4 transition-all ${
-                      tracker.isLoggedIn ? 'bg-[#9d86e9]/10 border-[#9d86e9]/40' : 'bg-[#161327] border-[#2b2746]'
+                      tracker.isLoggedIn ? (tracker.isTokenExpired ? 'bg-amber-500/10 border-amber-500/40' : 'bg-[#9d86e9]/10 border-[#9d86e9]/40') : 'bg-[#161327] border-[#2b2746]'
                     }`}>
                       <div className="flex items-center gap-3 min-w-0">
                         <img src={tracker.icon} alt={tracker.name} className="w-10 h-10 rounded-xl bg-[#231f3d] object-cover" />
                         <div className="flex flex-col min-w-0">
                           <span className="font-display font-bold text-sm text-white">{tracker.name}</span>
                           <span className="text-[11px] text-[#7c779b]">
-                            {tracker.isLoggedIn ? `Connected • ${tracker.trackRecords.totalCount} tracked manga` : 'Not connected'}
+                            {tracker.isLoggedIn
+                              ? tracker.isTokenExpired
+                                ? '⚠️ Token Expired • Reconnect Needed'
+                                : `Connected • ${tracker.trackRecords.totalCount} tracked manga`
+                              : 'Not connected'}
                           </span>
                         </div>
                       </div>
