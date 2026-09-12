@@ -19,7 +19,29 @@ const API_CACHE_PREFIX = 'neoko_cache_';
 
 import { getAppCache, setAppCache, clearAppCache } from './cacheManager';
 
-// ──────────────── Client-side 512MB Intelligent Cache ────────────────
+// ──────────────── Safe LocalStorage Helper ────────────────
+
+export function safeSetItem(key: string, value: string): boolean {
+  try {
+    localStorage.setItem(key, value);
+    return true;
+  } catch (e: any) {
+    if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+      console.warn(`[Storage] QuotaExceededError writing key "${key}". Clearing API cache and retrying...`);
+      clearApiCache();
+      try {
+        localStorage.setItem(key, value);
+        return true;
+      } catch (retryErr) {
+        console.error(`[Storage] Failed to set "${key}" even after clearing cache:`, retryErr);
+        return false;
+      }
+    }
+    return false;
+  }
+}
+
+// ──────────────── Client-side Intelligent Cache ────────────────
 
 export function getCachedData<T>(key: string): T | null {
   return getAppCache<T>(API_CACHE_PREFIX + key);
@@ -30,11 +52,15 @@ export function setCachedData<T>(key: string, data: T, ttlMinutes: number = 60 *
 }
 
 export function clearApiCache() {
-  Object.keys(localStorage).forEach(key => {
-    if (key.startsWith(API_CACHE_PREFIX)) {
-      localStorage.removeItem(key);
-    }
-  });
+  if (typeof localStorage !== 'undefined') {
+    Object.keys(localStorage).forEach(key => {
+      if (key.startsWith(API_CACHE_PREFIX) || key.startsWith('neoko_cache_') || key.startsWith('neoko_anilist_')) {
+        try {
+          localStorage.removeItem(key);
+        } catch {}
+      }
+    });
+  }
 }
 
 // ──────────────── Bookmarks ────────────────
@@ -62,7 +88,7 @@ export function saveBookmark(manga: Manga, category: BookmarkItem['category'] = 
     });
   }
 
-  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  safeSetItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_bookmarks_changed'));
   }
@@ -71,7 +97,7 @@ export function saveBookmark(manga: Manga, category: BookmarkItem['category'] = 
 
 export function removeBookmark(mangaId: string | number): BookmarkItem[] {
   const bookmarks = getBookmarks().filter(b => String(b.manga.id) !== String(mangaId));
-  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  safeSetItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_bookmarks_changed'));
   }
@@ -131,7 +157,7 @@ export function addHistoryItem(item: Omit<HistoryItem, 'readAt'>): HistoryItem[]
     readAt: Date.now(),
   };
   const updated = [newItem, ...history].slice(0, 100);
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
+  safeSetItem(HISTORY_KEY, JSON.stringify(updated));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_history_changed'));
   }
@@ -163,7 +189,7 @@ export function removeHistoryItem(mangaId: string | number, chapterId?: string |
     }
     return String(h.mangaId) !== String(mangaId);
   });
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  safeSetItem(HISTORY_KEY, JSON.stringify(history));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_history_changed'));
   }
@@ -171,7 +197,7 @@ export function removeHistoryItem(mangaId: string | number, chapterId?: string |
 }
 
 export function clearHistory(): void {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify([]));
+  safeSetItem(HISTORY_KEY, JSON.stringify([]));
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_history_changed'));
   }
@@ -193,7 +219,7 @@ export function markChapterRead(chapterId: string | number, genres: string[] = [
   const idStr = String(chapterId);
   const wasAlreadyRead = set.has(idStr);
   set.add(idStr);
-  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
   if (!wasAlreadyRead) {
     updateReadingStats(1, 3, genres);
   }
@@ -202,7 +228,7 @@ export function markChapterRead(chapterId: string | number, genres: string[] = [
 export function markChapterUnread(chapterId: string | number) {
   const set = getReadChapters();
   set.delete(String(chapterId));
-  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
 }
 
 export function markAllChaptersRead(chapterIds: (string | number)[], genres: string[] = []) {
@@ -215,7 +241,7 @@ export function markAllChaptersRead(chapterIds: (string | number)[], genres: str
       newlyReadCount++;
     }
   });
-  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
   if (newlyReadCount > 0) {
     updateReadingStats(newlyReadCount, newlyReadCount * 3, genres);
   }
@@ -226,7 +252,7 @@ export function markAllChaptersUnread(chapterIds: (string | number)[]) {
   chapterIds.forEach(id => {
     set.delete(String(id));
   });
-  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
 }
 
 export function toggleChapterRead(chapterId: string | number, genres: string[] = []): boolean {
@@ -239,7 +265,7 @@ export function toggleChapterRead(chapterId: string | number, genres: string[] =
     set.add(idStr);
     isNowRead = true;
   }
-  localStorage.setItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(READ_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
   if (isNowRead) {
     updateReadingStats(1, 3, genres);
   }
@@ -266,7 +292,7 @@ export function getDownloadedChapters(): Set<string> {
 export function markChapterDownloaded(chapterId: string | number) {
   const set = getDownloadedChapters();
   set.add(String(chapterId));
-  localStorage.setItem(DOWNLOADED_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
+  safeSetItem(DOWNLOADED_CHAPTERS_KEY, JSON.stringify(Array.from(set)));
 }
 
 export function isChapterDownloaded(chapterId: string | number): boolean {
@@ -329,7 +355,7 @@ export function toggleSourceEnabled(sourceId: string | number, sourceName?: stri
     }
   }
 
-  localStorage.setItem(DISABLED_SOURCES_KEY, JSON.stringify(updated));
+  safeSetItem(DISABLED_SOURCES_KEY, JSON.stringify(updated));
   clearApiCache();
   window.dispatchEvent(new Event('neoko_content_filter_changed'));
   return !updated.includes(idStr); // returns true if now enabled
@@ -345,7 +371,7 @@ export function getEnabledSourceIds(allSourceIds?: string[]): string[] {
 
 export function setEnabledSourceIds(sourceIds: string[]) {
   // Legacy support
-  localStorage.setItem(ENABLED_SOURCES_KEY, JSON.stringify(sourceIds));
+  safeSetItem(ENABLED_SOURCES_KEY, JSON.stringify(sourceIds));
 }
 
 // ──────────────── Content Filter ────────────────
@@ -376,7 +402,7 @@ export function getContentFilterSettings(): ContentFilterSettings {
 export function saveContentFilterSettings(settings: Partial<ContentFilterSettings>): ContentFilterSettings {
   const current = getContentFilterSettings();
   const updated = { ...current, ...settings };
-  localStorage.setItem(CONTENT_FILTER_KEY, JSON.stringify(updated));
+  safeSetItem(CONTENT_FILTER_KEY, JSON.stringify(updated));
   clearApiCache();
   if (typeof window !== 'undefined') {
     window.dispatchEvent(new Event('neoko_content_filter_changed'));
@@ -443,7 +469,7 @@ function getDefaultReaderSettings(): ReaderSettings {
 export function saveReaderSettings(settings: Partial<ReaderSettings>): ReaderSettings {
   const current = getReaderSettings();
   const updated = { ...current, ...settings };
-  localStorage.setItem(READER_SETTINGS_KEY, JSON.stringify(updated));
+  safeSetItem(READER_SETTINGS_KEY, JSON.stringify(updated));
   return updated;
 }
 
@@ -472,7 +498,7 @@ function getDefaultAppSettings(): AppSettings {
 export function saveAppSettings(settings: Partial<AppSettings>): AppSettings {
   const current = getAppSettings();
   const updated = { ...current, ...settings };
-  localStorage.setItem(APP_SETTINGS_KEY, JSON.stringify(updated));
+  safeSetItem(APP_SETTINGS_KEY, JSON.stringify(updated));
   window.dispatchEvent(new Event('neoko_app_settings_changed'));
   return updated;
 }
@@ -497,7 +523,7 @@ export function saveUserProfile(profile: Partial<UserProfile>): UserProfile {
     createdAt: Date.now(),
   };
   const updated = { ...current, ...profile };
-  localStorage.setItem(USER_PROFILE_KEY, JSON.stringify(updated));
+  safeSetItem(USER_PROFILE_KEY, JSON.stringify(updated));
   window.dispatchEvent(new Event('neoko_profile_changed'));
   return updated;
 }
@@ -542,7 +568,7 @@ export function getAdSettings(): AdSettings {
 export function saveAdSettings(settings: Partial<AdSettings>): AdSettings {
   const current = getAdSettings();
   const updated = { ...current, ...settings };
-  localStorage.setItem(AD_SETTINGS_KEY, JSON.stringify(updated));
+  safeSetItem(AD_SETTINGS_KEY, JSON.stringify(updated));
   window.dispatchEvent(new Event('neoko_ad_settings_changed'));
   return updated;
 }
@@ -569,7 +595,7 @@ export function importAllData(jsonString: string): boolean {
     const data = JSON.parse(jsonString);
     Object.entries(data).forEach(([key, value]) => {
       if (key.startsWith('neoko_')) {
-        localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+        safeSetItem(key, typeof value === 'string' ? value : JSON.stringify(value));
       }
     });
     return true;
@@ -640,7 +666,7 @@ export function resetReadingStats(): ReadingStats {
     lastReadDate: today,
     historyByDate: { [today]: actualReadChaptersCount },
   };
-  localStorage.setItem(STATS_KEY, JSON.stringify(resetStats));
+  safeSetItem(STATS_KEY, JSON.stringify(resetStats));
   window.dispatchEvent(new Event('neoko_stats_changed'));
   return resetStats;
 }
@@ -687,7 +713,7 @@ export function updateReadingStats(chaptersCount = 1, minutesSpent = 1, genres: 
     historyByDate: updatedHistoryByDate,
   };
 
-  localStorage.setItem(STATS_KEY, JSON.stringify(updated));
+  safeSetItem(STATS_KEY, JSON.stringify(updated));
   window.dispatchEvent(new Event('neoko_stats_changed'));
   return updated;
 }
@@ -741,14 +767,14 @@ export function saveCollection(collection: { id?: string; name: string; descript
     collections.push(newCol);
   }
 
-  localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+  safeSetItem(COLLECTIONS_KEY, JSON.stringify(collections));
   window.dispatchEvent(new Event('neoko_collections_changed'));
   return collections;
 }
 
 export function deleteCollection(id: string): MangaCollection[] {
   const collections = getCollections().filter(c => c.id !== id);
-  localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+  safeSetItem(COLLECTIONS_KEY, JSON.stringify(collections));
   window.dispatchEvent(new Event('neoko_collections_changed'));
   return collections;
 }
@@ -764,7 +790,7 @@ export function toggleMangaInCollection(collectionId: string, mangaId: string | 
       collections[idx].mangaIds.push(mangaId);
     }
     collections[idx].updatedAt = Date.now();
-    localStorage.setItem(COLLECTIONS_KEY, JSON.stringify(collections));
+    safeSetItem(COLLECTIONS_KEY, JSON.stringify(collections));
     window.dispatchEvent(new Event('neoko_collections_changed'));
   }
   return collections;
@@ -818,14 +844,14 @@ export function saveChapterNote(note: {
     notes.push(newNote);
   }
 
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  safeSetItem(NOTES_KEY, JSON.stringify(notes));
   window.dispatchEvent(new Event('neoko_notes_changed'));
   return notes;
 }
 
 export function deleteChapterNote(id: string): ChapterNote[] {
   const notes = getChapterNotes().filter(n => n.id !== id);
-  localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  safeSetItem(NOTES_KEY, JSON.stringify(notes));
   window.dispatchEvent(new Event('neoko_notes_changed'));
   return notes;
 }
@@ -870,17 +896,13 @@ export function addRecentSearch(query: string): string[] {
   const clean = query.trim();
   const current = getRecentSearches().filter(q => q.toLowerCase() !== clean.toLowerCase());
   const updated = [clean, ...current].slice(0, 8);
-  try {
-    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
-  } catch {}
+  safeSetItem(RECENT_SEARCHES_KEY, JSON.stringify(updated));
   return updated;
 }
 
 export function removeRecentSearch(query: string): string[] {
   const current = getRecentSearches().filter(q => q.toLowerCase() !== query.trim().toLowerCase());
-  try {
-    localStorage.setItem(RECENT_SEARCHES_KEY, JSON.stringify(current));
-  } catch {}
+  safeSetItem(RECENT_SEARCHES_KEY, JSON.stringify(current));
   return current;
 }
 
@@ -902,9 +924,7 @@ export function getGeminiApiKey(): string {
 }
 
 export function saveGeminiApiKey(key: string): void {
-  try {
-    localStorage.setItem(GEMINI_API_KEY, key.trim());
-  } catch {}
+  safeSetItem(GEMINI_API_KEY, key.trim());
 }
 
 export function getTranslationLanguage(): string {
@@ -916,9 +936,7 @@ export function getTranslationLanguage(): string {
 }
 
 export function saveTranslationLanguage(lang: string): void {
-  try {
-    localStorage.setItem(TRANSLATION_LANG_KEY, lang);
-  } catch {}
+  safeSetItem(TRANSLATION_LANG_KEY, lang);
 }
 
 export function getAiTranslationEnabled(): boolean {
@@ -931,12 +949,10 @@ export function getAiTranslationEnabled(): boolean {
 }
 
 export function saveAiTranslationEnabled(enabled: boolean): void {
-  try {
-    localStorage.setItem(AI_TRANSLATION_ENABLED_KEY, String(enabled));
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new Event('neoko_ai_translation_enabled_changed'));
-    }
-  } catch {}
+  safeSetItem(AI_TRANSLATION_ENABLED_KEY, String(enabled));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('neoko_ai_translation_enabled_changed'));
+  }
 }
 
 

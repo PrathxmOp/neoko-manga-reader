@@ -47,7 +47,10 @@ export async function fetchAuthenticatedImageBlob(imageUrl: string): Promise<str
   }
 }
 
-export async function queryGraphQL(query: string, variables: Record<string, any> = {}) {
+export async function queryGraphQL(query: string, variables: Record<string, any> = {}, timeoutMs: number = 15000) {
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timeoutId = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
+
   try {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
@@ -64,15 +67,23 @@ export async function queryGraphQL(query: string, variables: Record<string, any>
       method: 'POST',
       headers,
       body: JSON.stringify({ query, variables }),
+      signal: controller?.signal,
     });
+
+    if (timeoutId) clearTimeout(timeoutId);
 
     const json = await response.json();
     if (json.errors && json.errors.length > 0) {
       console.warn('GraphQL Notice:', json.errors[0]?.message);
     }
     return json;
-  } catch (error) {
-    console.error('GraphQL Network Error:', error);
+  } catch (error: any) {
+    if (timeoutId) clearTimeout(timeoutId);
+    if (error?.name === 'AbortError') {
+      console.warn(`GraphQL query timed out after ${timeoutMs}ms`);
+    } else {
+      console.error('GraphQL Network Error:', error);
+    }
     return null;
   }
 }

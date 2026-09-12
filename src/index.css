@@ -374,3 +374,16 @@ input[type="range"]::-moz-range-thumb {
   contain-intrinsic-size: 1px 400px;
 }
 
+@keyframes shimmerSweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.animate-shimmer-sweep {
+  animation: shimmerSweep 2.2s infinite ease-in-out;
+}
+

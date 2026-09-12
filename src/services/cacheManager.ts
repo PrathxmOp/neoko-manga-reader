@@ -1,10 +1,42 @@
-// 512MB Intelligent Fail-Safe Cache Manager for NEOKO Manga Web App
+// 2.5MB Intelligent Fail-Safe Cache Manager for NEOKO Manga Web App
+
+const ESSENTIAL_KEYS = new Set([
+  'neoko_manga_bookmarks',
+  'neoko_manga_history',
+  'neoko_enabled_sources_v2',
+  'neoko_disabled_sources_v1',
+  'neoko_read_chapters',
+  'neoko_reader_settings',
+  'neoko_content_filter',
+  'neoko_app_settings',
+  'neoko_user_profile',
+  'neoko_reading_stats',
+  'neoko_manga_collections',
+  'neoko_chapter_notes',
+  'neoko_gemini_api_key',
+  'neoko_translation_language',
+  'neoko_ai_translation_enabled',
+  'neoko_recent_searches',
+  'neoko_downloaded_chapters_v1',
+  'neoko_ad_settings',
+  'neoko_accounts',
+  'neoko_admin_password',
+]);
+
+export function isCacheKey(key: string): boolean {
+  if (ESSENTIAL_KEYS.has(key)) return false;
+  return (
+    key.startsWith('neoko_cache_') ||
+    key.startsWith('neoko_anilist_') ||
+    key.includes('chapter_pages_')
+  );
+}
 
 // Purge legacy SW graphql cache, unregister old SWs, and clear old chapter page cache entries
 if (typeof window !== 'undefined') {
   try {
     Object.keys(localStorage).forEach(key => {
-      if (key.includes('chapter_pages_')) {
+      if (isCacheKey(key)) {
         localStorage.removeItem(key);
       }
     });
@@ -26,7 +58,8 @@ if (typeof window !== 'undefined') {
   }
 }
 
-const CACHE_LIMIT_BYTES = 512 * 1024 * 1024; // 512 MB
+// Browser localStorage limit is ~5MB total. We cap API cache at 2.5MB to reserve space for user data.
+const CACHE_LIMIT_BYTES = 2.5 * 1024 * 1024; // 2.5 MB
 const INDEX_KEY = 'neoko_cache_index_v1';
 
 interface CacheMeta {
@@ -102,7 +135,15 @@ export function setAppCache<T>(key: string, data: T, ttlMinutes?: number): void 
 
     try {
       localStorage.setItem(key, JSON.stringify(data));
-    } catch {}
+    } catch (e: any) {
+      if (e?.name === 'QuotaExceededError' || e?.code === 22 || e?.code === 1014) {
+        // Evict older cache items aggressively if quota is exceeded
+        enforceCacheLimit(size * 2 + 1024 * 512);
+        try {
+          localStorage.setItem(key, JSON.stringify(data));
+        } catch {}
+      }
+    }
   } catch (err) {
     console.warn('Cache write bypassed for key:', key, err);
   }
@@ -154,12 +195,15 @@ export function getAppCache<T>(key: string): T | null {
 
 export function clearAppCache(): void {
   try {
-    const index = getIndex();
-    index.forEach(item => {
-      try {
-        localStorage.removeItem(item.key);
-      } catch {}
-    });
+    if (typeof localStorage !== 'undefined') {
+      Object.keys(localStorage).forEach(key => {
+        if (isCacheKey(key)) {
+          try {
+            localStorage.removeItem(key);
+          } catch {}
+        }
+      });
+    }
     localStorage.removeItem(INDEX_KEY);
     memoryCache.clear();
   } catch {}
@@ -172,11 +216,11 @@ export function getCacheUsageStats() {
     return {
       usedBytes,
       usedMB: (usedBytes / (1024 * 1024)).toFixed(1),
-      limitMB: 512,
+      limitMB: (CACHE_LIMIT_BYTES / (1024 * 1024)).toFixed(1),
       percent: Math.min(100, Math.round((usedBytes / CACHE_LIMIT_BYTES) * 100)),
       itemCount: index.length,
     };
   } catch {
-    return { usedBytes: 0, usedMB: '0.0', limitMB: 512, percent: 0, itemCount: 0 };
+    return { usedBytes: 0, usedMB: '0.0', limitMB: '2.5', percent: 0, itemCount: 0 };
   }
 }

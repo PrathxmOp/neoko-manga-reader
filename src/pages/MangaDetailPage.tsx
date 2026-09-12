@@ -159,15 +159,9 @@ export const MangaDetailPage: React.FC = () => {
 
       let data = await getMangaDetails(targetId, force);
 
-      // If chapters are missing, auto-trigger a fresh fetch from source
-      if (!data || !data.chapters || data.chapters.length === 0) {
-        data = await getMangaDetails(targetId, true);
-      }
-
-      setManga(data);
-      setReadChaptersSet(getReadChapters());
-
       if (data) {
+        setManga(data);
+        setReadChaptersSet(getReadChapters());
         const bookmarked = isBookmarked(data.id);
         setInLibrary(data.inLibrary || bookmarked);
         setCurrentCategory(getBookmarkCategory(data.id));
@@ -183,9 +177,28 @@ export const MangaDetailPage: React.FC = () => {
         fetchAniListRating(data.title).then(res => setAniListData(res));
         autoBindTrackers(data.id, data.title).catch(err => console.error('Auto bind error:', err));
       }
+
+      // Render page immediately so user is NEVER stuck on loading screen
+      setLoading(false);
+
+      // If chapters are missing, auto-trigger a fresh fetch from source in background
+      if (data && (!data.chapters || data.chapters.length === 0)) {
+        setIsResolvingChapters(true);
+        setResolutionStatus('Fetching latest chapters from active reading extension...');
+        try {
+          const freshData = await getMangaDetails(targetId, true);
+          if (freshData && freshData.chapters && freshData.chapters.length > 0) {
+            setManga(freshData);
+          }
+        } catch (err) {
+          console.warn('Background chapter fetch notice:', err);
+        } finally {
+          setIsResolvingChapters(false);
+          setResolutionStatus(null);
+        }
+      }
     } catch (e) {
       console.error(e);
-    } finally {
       setLoading(false);
     }
   };

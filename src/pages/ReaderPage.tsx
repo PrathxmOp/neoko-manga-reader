@@ -13,7 +13,7 @@ import {
   ZoomIn, ZoomOut, RotateCcw, Keyboard, ChevronUp, ChevronDown, List, 
   MessageSquare, Home, Pencil, Play, Pause, Eye, Sun, Moon,
   Scaling, Maximize2, SkipBack, SkipForward, Sliders, X, Check, StickyNote, Trash2,
-  AlertCircle, RefreshCw, Languages, Sparkles
+  AlertCircle, RefreshCw, Languages, Sparkles, BookOpen
 } from 'lucide-react';
 
 interface MangaPageImgProps {
@@ -22,6 +22,7 @@ interface MangaPageImgProps {
   alt: string;
   className?: string;
   loading?: 'lazy' | 'eager';
+  canLoad?: boolean;
   retryTrigger?: number;
   onLoad: (index: number) => void;
   onError: (index: number) => void;
@@ -32,23 +33,32 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
   originalUrl,
   alt,
   className,
-  loading = 'lazy',
+  loading = 'eager',
+  canLoad = true,
   retryTrigger = 0,
   onLoad,
   onError,
 }) => {
-  const [src, setSrc] = useState(originalUrl);
+  const [src, setSrc] = useState<string | null>(canLoad ? originalUrl : null);
   const [retryCount, setRetryCount] = useState(0);
   const [isDone, setIsDone] = useState(false);
   const maxRetries = 4;
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    setSrc(originalUrl);
-    setRetryCount(0);
-    setIsDone(false);
-    if (timeoutRef.current) clearTimeout(timeoutRef.current);
-  }, [originalUrl, retryTrigger]);
+    if (canLoad && !src) {
+      setSrc(originalUrl);
+    }
+  }, [canLoad, originalUrl]);
+
+  useEffect(() => {
+    if (canLoad) {
+      setSrc(originalUrl);
+      setRetryCount(0);
+      setIsDone(false);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    }
+  }, [originalUrl, retryTrigger, canLoad]);
 
   const handleErr = async () => {
     if (isDone) return;
@@ -61,17 +71,13 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
     }
 
     setRetryCount(nextRetry);
-
-    // Exponential delay for auto retries: ~400ms, 800ms, 1200ms, 1800ms
     const delay = Math.min(400 * Math.pow(1.4, nextRetry - 1), 2000);
 
     timeoutRef.current = setTimeout(async () => {
       if (nextRetry === 1) {
-        // Try Cache-Buster query
         const busterUrl = originalUrl + (originalUrl.includes('?') ? '&' : '?') + 't=' + Date.now();
         setSrc(busterUrl);
       } else if (nextRetry === 2 || nextRetry === 4) {
-        // Try Authenticated Blob fetch via backend API
         const blobUrl = await fetchAuthenticatedImageBlob(originalUrl);
         if (blobUrl) {
           setSrc(blobUrl);
@@ -79,7 +85,6 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
           setSrc(originalUrl + (originalUrl.includes('?') ? '&' : '?') + 'r=' + Date.now());
         }
       } else {
-        // Retry original URL fresh
         setSrc(originalUrl);
       }
     }, delay);
@@ -90,6 +95,8 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  if (!src) return null;
 
   return (
     <img
@@ -104,7 +111,6 @@ const MangaPageImg: React.FC<MangaPageImgProps> = ({
         onLoad(pageIndex);
       }}
       onError={handleErr}
-
       className={className}
     />
   );
@@ -194,6 +200,9 @@ export const ReaderPage: React.FC = () => {
 
   // Reading Color Tint Filter
   const [colorFilter, setColorFilter] = useState<'normal' | 'sepia' | 'dark' | 'invert'>('normal');
+
+  // Strict Sequential Page Loading Index (0 -> 1 -> 2 -> 3...)
+  const [activeSeqIndex, setActiveSeqIndex] = useState<number>(0);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isInitialScrollLock = useRef(true);
@@ -430,6 +439,9 @@ export const ReaderPage: React.FC = () => {
       return next;
     });
 
+    // Advance sequence index to allow next page (index + 1) to load in order
+    setActiveSeqIndex(prev => Math.max(prev, index + 1));
+
     if (isInitialScrollLock.current && settings.mode === 'webtoon' && initialStartPageRef.current > 1) {
       const el = document.getElementById(`reader-page-${initialStartPageRef.current}`);
       if (el) {
@@ -442,33 +454,39 @@ export const ReaderPage: React.FC = () => {
     setFailedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
     setLoadedPages(prev => { const n = new Set(prev); n.delete(index); return n; });
     setPageRetryKeys(prev => ({ ...prev, [index]: (prev[index] || 0) + 1 }));
+    setActiveSeqIndex(prev => Math.max(prev, index));
   };
 
-  // Sequential image preloader to prevent network congestion/timeouts over proxy tunnels
+  // Watchdog timer: if current page in sequence takes over 3.5s, advance to next page so sequence never stalls
+  useEffect(() => {
+    if (pages.length === 0 || activeSeqIndex >= pages.length) return;
+    const timer = setTimeout(() => {
+      setActiveSeqIndex(prev => Math.min(pages.length - 1, prev + 1));
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, [activeSeqIndex, pages.length]);
+
+  // Strict Sequential image preloader: loads page 0, then 1, then 2, then 3 in exact order
   useEffect(() => {
     if (pages.length === 0) return;
     setLoadedPages(new Set());
+    setActiveSeqIndex(0);
 
     let isMounted = true;
-    let currentIndex = 0;
+    let nextIndex = 0;
 
     const loadNextSequentially = () => {
-      if (!isMounted || currentIndex >= pages.length) return;
-      const idx = currentIndex;
-      currentIndex++;
+      if (!isMounted || nextIndex >= pages.length) return;
+      const idx = nextIndex;
+      nextIndex++;
 
       const img = new Image();
       img.src = pages[idx];
 
       const onDone = () => {
         if (isMounted) {
-          setLoadedPages(prev => {
-            if (prev.has(idx)) return prev;
-            const next = new Set(prev);
-            next.add(idx);
-            return next;
-          });
-          setTimeout(loadNextSequentially, 80);
+          handleImageLoad(idx);
+          setTimeout(loadNextSequentially, 50);
         }
       };
 
@@ -476,11 +494,7 @@ export const ReaderPage: React.FC = () => {
       img.onerror = onDone;
     };
 
-    // Run 2 parallel sequential queues to balance fast loading & zero network drops
     loadNextSequentially();
-    if (pages.length > 1) {
-      setTimeout(loadNextSequentially, 150);
-    }
 
     return () => {
       isMounted = false;
@@ -1238,9 +1252,12 @@ export const ReaderPage: React.FC = () => {
                     onRetry={() => handleTranslatePage(index)}
                   />
                   {!isLoaded && (
-                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10" style={{ minHeight: '350px' }}>
-                      <Loader2 className="w-7 h-7 animate-spin text-primary/80" />
-                      <span className="text-[11px] font-semibold text-outline">Loading Page {index + 1}...</span>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0a1a]/85 border border-white/5 rounded-2xl gap-3 z-10 min-h-[350px] select-none backdrop-blur-sm">
+                      <div className="relative flex items-center justify-center">
+                        <div className="w-9 h-9 rounded-full border-2 border-[#9d86e9]/20 border-t-[#9d86e9] animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin text-[#9d86e9] absolute" />
+                      </div>
+                      <span className="text-xs font-semibold text-[#b8b2e3] tracking-wide">Loading Page {index + 1}...</span>
                     </div>
                   )}
                   {/* Invisible Anti-Scraper Transparent Overlay */}
@@ -1255,6 +1272,7 @@ export const ReaderPage: React.FC = () => {
                     originalUrl={url}
                     alt={`Page ${index + 1}`}
                     loading="lazy"
+                    canLoad={index <= activeSeqIndex || isLoaded}
                     retryTrigger={pageRetryKeys[index] || 0}
                     onLoad={handleImageLoad}
                     onError={(idx) => {
@@ -1301,9 +1319,12 @@ export const ReaderPage: React.FC = () => {
                 ) : (
                   <>
                     {!loadedPages.has(currentPage - 1) && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
-                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
-                        <span className="text-[11px] font-semibold text-outline">Page {currentPage}</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0a1a]/85 border border-white/5 rounded-2xl gap-3 z-10 min-h-[350px] select-none backdrop-blur-sm">
+                        <div className="relative flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-full border-2 border-[#9d86e9]/20 border-t-[#9d86e9] animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin text-[#9d86e9] absolute" />
+                        </div>
+                        <span className="text-xs font-semibold text-[#b8b2e3] tracking-wide">Loading Page {currentPage}...</span>
                       </div>
                     )}
                     <div 
@@ -1315,6 +1336,7 @@ export const ReaderPage: React.FC = () => {
                       pageIndex={currentPage - 1}
                       originalUrl={pages[currentPage - 1]}
                       alt={`Page ${currentPage}`}
+                      canLoad={currentPage - 1 <= activeSeqIndex || loadedPages.has(currentPage - 1)}
                       retryTrigger={pageRetryKeys[currentPage - 1] || 0}
                       onLoad={handleImageLoad}
                       onError={(idx) => {
@@ -1353,9 +1375,12 @@ export const ReaderPage: React.FC = () => {
                 ) : (
                   <>
                     {!loadedPages.has(currentPage) && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
-                        <Loader2 className="w-7 h-7 animate-spin text-primary" />
-                        <span className="text-[11px] font-semibold text-outline">Page {currentPage + 1}</span>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0a1a]/85 border border-white/5 rounded-2xl gap-3 z-10 min-h-[350px] select-none backdrop-blur-sm">
+                        <div className="relative flex items-center justify-center">
+                          <div className="w-9 h-9 rounded-full border-2 border-[#9d86e9]/20 border-t-[#9d86e9] animate-spin" />
+                          <Loader2 className="w-4 h-4 animate-spin text-[#9d86e9] absolute" />
+                        </div>
+                        <span className="text-xs font-semibold text-[#b8b2e3] tracking-wide">Loading Page {currentPage + 1}...</span>
                       </div>
                     )}
                     <div 
@@ -1367,6 +1392,7 @@ export const ReaderPage: React.FC = () => {
                       pageIndex={currentPage}
                       originalUrl={pages[currentPage]}
                       alt={`Page ${currentPage + 1}`}
+                      canLoad={currentPage <= activeSeqIndex || loadedPages.has(currentPage)}
                       retryTrigger={pageRetryKeys[currentPage] || 0}
                       onLoad={handleImageLoad}
                       onError={(idx) => {
@@ -1424,9 +1450,12 @@ export const ReaderPage: React.FC = () => {
                   ) : (
                     <>
                       {!loadedPages.has(safeIdx) && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-surface-container-low/50 border border-white/5 rounded-xl gap-2 z-10">
-                          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                          <span className="text-xs font-semibold text-outline">Loading Page {displayNum}...</span>
+                        <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#0d0a1a]/85 border border-white/5 rounded-2xl gap-3 z-10 min-h-[350px] select-none backdrop-blur-sm">
+                          <div className="relative flex items-center justify-center">
+                            <div className="w-9 h-9 rounded-full border-2 border-[#9d86e9]/20 border-t-[#9d86e9] animate-spin" />
+                            <Loader2 className="w-4 h-4 animate-spin text-[#9d86e9] absolute" />
+                          </div>
+                          <span className="text-xs font-semibold text-[#b8b2e3] tracking-wide">Loading Page {displayNum}...</span>
                         </div>
                       )}
                       <div 
@@ -1438,6 +1467,7 @@ export const ReaderPage: React.FC = () => {
                         pageIndex={safeIdx}
                         originalUrl={pageUrl}
                         alt={`Page ${displayNum}`}
+                        canLoad={safeIdx <= activeSeqIndex || loadedPages.has(safeIdx)}
                         retryTrigger={pageRetryKeys[safeIdx] || 0}
                         onLoad={handleImageLoad}
                         onError={(idx) => {
