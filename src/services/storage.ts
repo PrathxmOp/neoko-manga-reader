@@ -363,8 +363,17 @@ export function toggleSourceEnabled(sourceId: string | number, sourceName?: stri
 
 export function getEnabledSourceIds(allSourceIds?: string[]): string[] {
   const disabled = getDisabledSourceIds();
-  if (allSourceIds && allSourceIds.length > 0) {
-    return allSourceIds.filter(id => !disabled.includes(String(id)));
+  let pool = allSourceIds;
+  if (!pool || pool.length === 0) {
+    try {
+      const cached = getCachedData<{ id: string }[]>('sources_list_raw_v3');
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        pool = cached.map(s => String(s.id));
+      }
+    } catch {}
+  }
+  if (pool && pool.length > 0) {
+    return pool.filter(id => !disabled.includes(String(id)));
   }
   return [];
 }

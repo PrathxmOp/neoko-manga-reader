@@ -58,7 +58,7 @@ export const SearchBrowsePage: React.FC = () => {
   useEffect(() => {
     loadAndSearch(urlQuery, 1);
 
-    getSources(true, true).then(sources => {
+    getSources(false, true).then(sources => {
       if (sources && sources.length > 0) {
         const listToUse = sources.filter(s => isSourceEnabled(s.id, s.name));
 

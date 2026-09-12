@@ -151,7 +151,6 @@ export const MangaDetailPage: React.FC = () => {
             return;
           } else {
             setIsResolvingChapters(false);
-            showToast('No active source scraper has chapters for this title yet.', 'warning');
             return;
           }
         }
