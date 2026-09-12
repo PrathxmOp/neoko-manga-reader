@@ -527,8 +527,8 @@ export async function searchMultiSource(
     if (cached && cached.mangas && cached.mangas.length > 0) return cached;
   }
 
-  // Set 6s timeout for searches so scrapers respond fast without hanging the UI
-  const timeoutMs = queryText.trim() ? 6000 : 3500;
+  // Set fast 2s timeout for catalog browse and 6s for explicit title search
+  const timeoutMs = queryText.trim() ? 6000 : 2000;
 
   const fetchWithTimeout = (sId: string) =>
     Promise.race([
@@ -545,6 +545,19 @@ export async function searchMultiSource(
     const chunk = targetSourceIds.slice(i, i + chunkSize);
     const chunkResults = await Promise.allSettled(chunk.map(sId => fetchWithTimeout(sId)));
     results.push(...chunkResults);
+
+    // For home catalog browse (no search query), if we already got 8+ items from top sources, early exit to avoid waiting for slow tail sources
+    if (!queryText.trim() && i + chunkSize < targetSourceIds.length) {
+      let currentItemsCount = 0;
+      chunkResults.forEach(r => {
+        if (r.status === 'fulfilled' && r.value?.mangas) {
+          currentItemsCount += r.value.mangas.length;
+        }
+      });
+      if (currentItemsCount >= 8) {
+        break;
+      }
+    }
   }
 
   const combined: Manga[] = [];

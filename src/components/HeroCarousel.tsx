@@ -95,6 +95,9 @@ export const HeroCarousel: React.FC<HeroCarouselProps> = ({ items }) => {
           <img
             src={currentItem.thumbnailUrl || DEFAULT_MANGA_COVER}
             alt={currentItem.title}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 pointer-events-none"
             onError={handleImageError}
           />

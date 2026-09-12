@@ -10,10 +10,11 @@ interface MangaCardProps {
   manga: Manga;
   rankBadge?: string;
   progressPercent?: number;
+  priority?: boolean;
   onInfoClick?: (manga: Manga, e: React.MouseEvent) => void;
 }
 
-export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadge, progressPercent, onInfoClick }) => {
+export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadge, progressPercent, priority = false, onInfoClick }) => {
   const navigate = useNavigate();
 
   const handleClick = () => {
@@ -50,7 +51,8 @@ export const MangaCard: React.FC<MangaCardProps> = React.memo(({ manga, rankBadg
         <img
           src={getImageUrl(manga.thumbnailUrl) || DEFAULT_MANGA_COVER}
           alt={manga.title}
-          loading="lazy"
+          loading={priority ? "eager" : "lazy"}
+          fetchPriority={priority ? "high" : "auto"}
           decoding="async"
           sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 16vw"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

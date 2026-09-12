@@ -93,6 +93,35 @@ export const DiscoverPage: React.FC = () => {
 
   const observerTarget = useRef<HTMLDivElement>(null);
 
+  const isFastHydrated = useRef(false);
+
+  const hydrateFastHomeCatalog = async () => {
+    try {
+      const aniRes = await searchAniList('', 1, 24);
+      if (aniRes.mangas && aniRes.mangas.length > 0) {
+        const pop = aniRes.mangas.slice(0, 8);
+        const added = aniRes.mangas.slice(8, 14);
+        const updated = aniRes.mangas.slice(2, 10);
+        const extra = aniRes.mangas.slice(14);
+        setPopularManga(pop);
+        setRecentlyAdded(added);
+        setRecentlyUpdated(updated);
+        setExtraCatalog(extra);
+        setLoading(false);
+        isFastHydrated.current = true;
+        return;
+      }
+    } catch (e) {
+      console.warn('Fast AniList hydration fallback:', e);
+    }
+    const demos = getDemoMangas();
+    setPopularManga(demos);
+    setRecentlyAdded(demos.slice(2, 6));
+    setRecentlyUpdated(demos);
+    setLoading(false);
+    isFastHydrated.current = true;
+  };
+
   useEffect(() => {
     document.title = 'NEOKO — Discover Manga';
     // Hydrate Continue Reading items
@@ -108,7 +137,10 @@ export const DiscoverPage: React.FC = () => {
       // Quiet background refresh without blocking screen
       loadMangaCatalog(false, false);
     } else {
-      loadMangaCatalog(false, true);
+      // Instant zero-delay hydration (< 200ms) for first-time users, followed by background Suwayomi sync
+      hydrateFastHomeCatalog().then(() => {
+        loadMangaCatalog(false, false);
+      });
     }
 
     const handleFilterChange = () => {
@@ -163,7 +195,7 @@ export const DiscoverPage: React.FC = () => {
           loadMoreManga();
         }
       },
-      { threshold: 0.1, rootMargin: '400px' }
+      { threshold: 0.1, rootMargin: '600px' }
     );
 
     const currentTarget = observerTarget.current;
@@ -197,19 +229,54 @@ export const DiscoverPage: React.FC = () => {
 
       const realLatest = enrich(latestRes);
       const updated = realLatest.length > 0 ? realLatest : popCatalog.slice(4, 12);
+      const extraFromSources = popCatalog.slice(14);
 
       if (pop.length > 0) {
-        setPopularManga(pop);
-        setRecentlyAdded(added);
-        setRecentlyUpdated(updated);
+        if (isFastHydrated.current && !forceRefresh) {
+          // Smoothly enrich existing fast-hydrated catalog without triggering a jarring double re-render/flash
+          setPopularManga(prev => {
+            const mergedMap = new Map<string, Manga>();
+            prev.forEach(m => mergedMap.set(m.title.toLowerCase().trim(), m));
+            pop.forEach(m => {
+              const norm = m.title.toLowerCase().trim();
+              if (mergedMap.has(norm)) {
+                const existing = mergedMap.get(norm)!;
+                mergedMap.set(norm, {
+                  ...existing,
+                  sourceId: m.sourceId,
+                  sourceName: m.sourceName,
+                  chapterCount: m.chapterCount || existing.chapterCount
+                });
+              }
+            });
+            return Array.from(mergedMap.values());
+          });
 
-        // Cache home catalog for fast instant loading next time
-        setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
+          setRecentlyUpdated(updated);
+          if (extraFromSources.length > 0) {
+            setExtraCatalog(prev => {
+              const existingSet = new Set(prev.map(m => m.title.toLowerCase().trim()));
+              const uniqueExtra = extraFromSources.filter(m => !existingSet.has(m.title.toLowerCase().trim()));
+              return [...prev, ...uniqueExtra];
+            });
+          }
+          setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
+        } else {
+          setPopularManga(pop);
+          setRecentlyAdded(added);
+          setRecentlyUpdated(updated);
+          if (extraFromSources.length > 0) {
+            setExtraCatalog(extraFromSources);
+          }
+          setCachedData(HOME_CACHE_KEY, { popular: pop, added, updated }, 10);
+        }
       } else {
-        const demos = getDemoMangas();
-        setPopularManga(demos);
-        setRecentlyAdded(demos.slice(2, 6));
-        setRecentlyUpdated(demos);
+        if (popularManga.length === 0) {
+          const demos = getDemoMangas();
+          setPopularManga(demos);
+          setRecentlyAdded(demos.slice(2, 6));
+          setRecentlyUpdated(demos);
+        }
       }
     } catch (e) {
       console.error(e);
@@ -230,28 +297,55 @@ export const DiscoverPage: React.FC = () => {
     try {
       const activeIds = getEnabledSourceIds();
       const nextPage = page + 1;
-      const res = await searchMultiSource(activeIds, '', nextPage, false);
-      if (res.mangas && res.mangas.length > 0) {
-        const enrich = (list: Manga[]) => (list || []).map(m => ({ ...m, sourceName: getSourceName(m.sourceId, m.sourceName) }));
-        const newItems = enrich(res.mangas);
+      let newItems: Manga[] = [];
 
-        const existingIds = new Set([
-          ...popularManga.map(m => String(m.id)),
-          ...recentlyAdded.map(m => String(m.id)),
-          ...recentlyUpdated.map(m => String(m.id)),
-          ...extraCatalog.map(m => String(m.id)),
-        ]);
+      // 1. Fetch from active Suwayomi extension sources
+      try {
+        const res = await searchMultiSource(activeIds, '', nextPage, false);
+        if (res.mangas && res.mangas.length > 0) {
+          const enrich = (list: Manga[]) => (list || []).map(m => ({ ...m, sourceName: getSourceName(m.sourceId, m.sourceName) }));
+          newItems = enrich(res.mangas);
+        }
+      } catch (e) {
+        console.warn('Suwayomi multi-source pagination notice:', e);
+      }
 
-        const uniqueNew = newItems.filter(m => !existingIds.has(String(m.id)));
+      // 2. Supplement with AniList page N (24 items per page) for endless infinite scrolling
+      try {
+        const aniRes = await searchAniList('', nextPage, 24);
+        if (aniRes.mangas && aniRes.mangas.length > 0) {
+          newItems = [...newItems, ...aniRes.mangas];
+        }
+      } catch (aniErr) {
+        console.warn('AniList infinite scroll fallback notice:', aniErr);
+      }
 
-        if (uniqueNew.length > 0) {
-          setExtraCatalog(prev => [...prev, ...uniqueNew]);
-          setPage(nextPage);
-        } else {
+      // 3. Deduplicate against existing items in feed
+      const existingTitles = new Set([
+        ...popularManga.map(m => m.title.toLowerCase().trim()),
+        ...recentlyAdded.map(m => m.title.toLowerCase().trim()),
+        ...recentlyUpdated.map(m => m.title.toLowerCase().trim()),
+        ...extraCatalog.map(m => m.title.toLowerCase().trim()),
+      ]);
+
+      const uniqueNew: Manga[] = [];
+      newItems.forEach(m => {
+        const norm = m.title.toLowerCase().trim();
+        if (norm && !existingTitles.has(norm)) {
+          existingTitles.add(norm);
+          uniqueNew.push(m);
+        }
+      });
+
+      if (uniqueNew.length > 0) {
+        setExtraCatalog(prev => [...prev, ...uniqueNew]);
+        setPage(nextPage);
+      } else {
+        // Advance page counter to try next page on next scroll trigger instead of killing feed prematurely
+        setPage(nextPage);
+        if (nextPage >= 50) {
           setHasMore(false);
         }
-      } else {
-        setHasMore(false);
       }
     } catch (e) {
       console.error('Lazy loading error:', e);
@@ -511,10 +605,11 @@ export const DiscoverPage: React.FC = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3 sm:gap-4">
-            {filteredPopular.map((manga) => (
+            {filteredPopular.map((manga, idx) => (
               <MangaCard
                 key={manga.id}
                 manga={manga}
+                priority={idx < 6}
                 onInfoClick={(m, e) => handleOpenPreview(m, e)}
               />
             ))}
@@ -648,7 +743,7 @@ export const DiscoverPage: React.FC = () => {
               <Loader2 className="w-4 h-4 animate-spin" />
               <span>Fetching more manga from active extensions...</span>
             </div>
-          ) : !hasMore ? (
+          ) : (!hasMore && extraCatalog.length > 0) ? (
             <div className="text-center py-4 text-xs font-bold text-[#7c779b] bg-[#161327]/60 rounded-xl px-6 border border-[#2b2746]/50">
               🎉 You've reached the end of the home feed! Use search to discover more.
             </div>
